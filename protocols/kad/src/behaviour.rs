@@ -26,7 +26,7 @@ use crate::K_VALUE;
 use crate::addresses::Addresses;
 use crate::handler::{KademliaHandler, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::jobs::*;
-use crate::kbucket::{self, KBucketsTable, NodeStatus};
+use crate::kbucket::{self, KBucketsTable, NodeStatus, bucketable::Bucketable, KeyBytes};
 use crate::protocol::{KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
@@ -42,9 +42,12 @@ use std::task::{Context, Poll};
 use wasm_timer::Instant;
 
 /// Network behaviour that handles Kademlia.
-pub struct Kademlia<TStore> {
+pub struct Kademlia<TStore, T, KContact>
+where
+    T: Bucketable
+{
     /// The Kademlia routing table.
-    kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
+    kbuckets: KBucketsTable<dyn Bucketable<TKey = PeerId, TVal = Addresses>>,
 
     /// An optional protocol name override to segregate DHTs in the network.
     protocol_name_override: Option<Cow<'static, [u8]>>,
@@ -76,6 +79,8 @@ pub struct Kademlia<TStore> {
 
     /// The record storage.
     store: TStore,
+
+    _phantom: std::marker::PhantomData<KContact>,
 }
 
 /// The configuration for the `Kademlia` behaviour.
@@ -213,9 +218,10 @@ impl KademliaConfig {
     }
 }
 
-impl<TStore> Kademlia<TStore>
+impl<TStore, T, KContact> Kademlia<TStore, T, KContact>
 where
-    for<'a> TStore: RecordStore<'a>
+    for<'a> TStore: RecordStore<'a>,
+    T: Bucketable,
 {
     /// Creates a new `Kademlia` network behaviour with the given configuration.
     pub fn new(id: PeerId, store: TStore) -> Self {
@@ -258,6 +264,7 @@ where
             put_record_job,
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
+            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -551,7 +558,7 @@ where
     /// Finds the closest peers to a `target` in the context of a request by
     /// the `source` peer, such that the `source` peer is never included in the
     /// result.
-    fn find_closest<T: Clone>(&mut self, target: &kbucket::Key<T>, source: &PeerId) -> Vec<KadPeer> {
+    fn find_closest<U: Clone>(&mut self, target: &kbucket::Key<U>, source: &PeerId) -> Vec<KadPeer> {
         if target == self.kbuckets.local_key() {
             Vec::new()
         } else {
@@ -1015,9 +1022,13 @@ where
     }
 }
 
-impl<TStore> NetworkBehaviour for Kademlia<TStore>
+impl<TStore, T, KContact> NetworkBehaviour for Kademlia<TStore, T, KContact>
 where
     for<'a> TStore: RecordStore<'a>,
+    T: Bucketable + Send + 'static,
+    <T as kbucket::Bucketable>::TKey: Send,
+    <T as kbucket::Bucketable>::TVal: Send,
+    KContact: Send + 'static,
     TStore: Send + 'static,
 {
     type ProtocolsHandler = KademliaHandler<QueryId>;
