@@ -1117,8 +1117,7 @@ where
     fn print_bucket_table(&mut self) {
         let buckets = self.kbuckets.buckets().filter_map(|KBucketRef { index, bucket }| {
             let elems = bucket.iter();
-            println!("size hint is {:?}", elems.size_hint());
-            if elems.size_hint().1 == None {
+            if elems.size_hint().1.map_or(true, |upper| upper == 0) {
                 return None
             } else {
                 let elems = elems.collect::<Vec<_>>();
