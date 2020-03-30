@@ -26,7 +26,7 @@ use crate::K_VALUE;
 use crate::addresses::{Addresses, Remove};
 use crate::handler::{KademliaHandler, KademliaHandlerConfig, KademliaRequestId, KademliaHandlerEvent, KademliaHandlerIn};
 use crate::jobs::*;
-use crate::kbucket::{self, KBucketsTable, NodeStatus};
+use crate::kbucket::{self, KBucketsTable, NodeStatus, KBucketRef};
 use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
@@ -500,6 +500,7 @@ where
     /// The results of the (repeated) provider announcements sent by this node are
     /// delivered in [`AddProviderResult`].
     pub fn start_providing(&mut self, key: record::Key) {
+        self.print_bucket_table();
         // TODO: calculate weight for self?
         let record = ProviderRecord::new(key.clone(), self.kbuckets.local_key().preimage().clone());
         if let Err(err) = self.store.add_provider(record) {
@@ -528,6 +529,12 @@ where
     /// This is a local operation. The local node will still be considered as a
     /// provider for the key by other nodes until these provider records expire.
     pub fn stop_providing(&mut self, key: &record::Key) {
+        let target = kbucket::Key::new(key.clone());
+        debug!(
+            "stop_providing for key {} ; kademlia key {}",
+            bs58::encode(key.as_ref()).into_string(), // peer id
+            bs58::encode(target.as_ref()).into_string(), // sha256
+        );
         self.store.remove_provider(key, self.kbuckets.local_key().preimage());
     }
 
@@ -535,6 +542,7 @@ where
     ///
     /// The result of this operation is delivered in [`KademliaEvent::GetProvidersResult`].
     pub fn get_providers(&mut self, key: record::Key) {
+        self.print_bucket_table();
         let info = QueryInfo::GetProviders {
             key: key.clone(),
             providers: Vec::new(),
@@ -1104,6 +1112,29 @@ where
                 info!("Provider record not stored: {:?}", e);
             }
         }
+    }
+
+    fn print_bucket_table(&mut self) {
+        let buckets = self.kbuckets.buckets().filter_map(|KBucketRef { index, bucket }| {
+            let elems = bucket.iter();
+            if elems.size_hint().1 == None {
+                return None
+            } else {
+                let elems = bucket.iter().collect::<Vec<_>>();
+                let header = format!("Bucket {:?}, elements: {}", index.get(), elems.len());
+                let elems = elems.into_iter().map(|(node, status)| {
+                    let status_s = match status {
+                        NodeStatus::Connected => "C",
+                        NodeStatus::Disconnected => "D"
+                    };
+                    format!("\t{} {} {}\n", status_s, node.weight, &node.key.preimage().to_base58()[30..])
+                }).collect::<String>();
+
+                Some(format!("{}\n{}\n", header, elems))
+            }
+        }).collect::<String>();
+
+        log::info!("{}", buckets);
     }
 }
 
