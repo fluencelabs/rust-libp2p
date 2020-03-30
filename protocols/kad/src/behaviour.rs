@@ -1146,6 +1146,7 @@ where
                     let address_plus = node.value.addresses
                         .len()
                         .checked_sub(1)
+                        .filter(|l| *l != 0)
                         .map(|l| format!(" (+{})", l))
                         .unwrap_or("".to_string());
 
