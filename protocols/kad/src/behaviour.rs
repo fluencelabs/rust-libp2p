@@ -1282,6 +1282,7 @@ where
     ) {
         match event {
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
+                self.print_bucket_table();
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
                 self.queued_events.push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id: source,
@@ -1301,6 +1302,7 @@ where
             }
 
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
+                self.print_bucket_table();
                 let provider_peers = self.provider_peers(&key, &source);
                 debug!(
                     "provider peers: {}",
