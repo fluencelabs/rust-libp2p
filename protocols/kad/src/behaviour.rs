@@ -32,7 +32,7 @@ use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState};
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use crate::contact::Contact;
 use fnv::{FnvHashMap, FnvHashSet};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId, multiaddr};
 use libp2p_swarm::{
     NetworkBehaviour,
     NetworkBehaviourAction,
@@ -1117,6 +1117,7 @@ where
 
     fn print_bucket_table(&mut self) {
         let buckets = self.kbuckets.buckets().filter_map(|KBucketRef { index, bucket }| {
+            use multiaddr::Protocol::{Ip4, Ip6, Tcp};
             let elems = bucket.iter().collect::<Vec<_>>();
             if elems.len() == 0 {
                 return None
@@ -1127,14 +1128,55 @@ where
                         NodeStatus::Connected => "C",
                         NodeStatus::Disconnected => "D"
                     };
-                    format!("\t{} {} {}\n", status_s, node.weight, &node.key.preimage().to_base58()[30..])
+
+                    let address_s = node.value.addresses
+                        .iter()
+                        .next()
+                        .map(|ma|
+                            ma.iter().fold(String::new(), |acc, proto|
+                                match proto {
+                                    Ip4(addr) => format!("{}", addr),
+                                    Ip6(addr) => format!("{}", addr),
+                                    Tcp(port) => format!("{}:{}", acc, port),
+                                    _ => acc
+                                }
+                            )
+                        ).unwrap_or("NOADDR".to_string());
+
+                    let address_plus = node.value.addresses
+                        .len()
+                        .checked_sub(1)
+                        .map(|l| format!(" (+{})", l))
+                        .unwrap_or("".to_string());
+
+                    let kademlia_key = bs58::encode(node.key.as_ref()).into_string();
+                    let len = kademlia_key.len();
+                    let kademlia_key = &kademlia_key[len - 10..];
+
+                    let peer_id = node.key.preimage().to_base58();
+                    let len = peer_id.len();
+                    let peer_id = &peer_id[len - 10..];
+
+                    format!(
+                        "\t{} {} {} {}{} {}\n",
+                        status_s,
+                        node.weight,
+                        peer_id,
+                        address_s,
+                        address_plus,
+                        kademlia_key
+                    )
                 }).collect::<String>();
 
                 Some(format!("{}\n{}\n", header, elems))
             }
         }).collect::<String>();
 
-        log::info!("\n{}", buckets);
+        if buckets.trim().is_empty() {
+            log::info!("Bucket table is empty.")
+        } else {
+            log::info!("\n{}", buckets);
+        }
     }
 }
 
