@@ -1133,7 +1133,7 @@ where
             }
         }).collect::<String>();
 
-        log::info!("{}", buckets);
+        log::info!("\n{}", buckets);
     }
 }
 
