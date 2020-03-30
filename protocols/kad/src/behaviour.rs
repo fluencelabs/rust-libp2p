@@ -1116,11 +1116,10 @@ where
 
     fn print_bucket_table(&mut self) {
         let buckets = self.kbuckets.buckets().filter_map(|KBucketRef { index, bucket }| {
-            let elems = bucket.iter();
-            if elems.size_hint().1.map_or(true, |upper| upper == 0) {
+            let elems = bucket.iter().collect::<Vec<_>>();
+            if elems.len() == 0 {
                 return None
             } else {
-                let elems = elems.collect::<Vec<_>>();
                 let header = format!("Bucket {:?}, elements: {}", index.get(), elems.len());
                 let elems = elems.into_iter().map(|(node, status)| {
                     let status_s = match status {
