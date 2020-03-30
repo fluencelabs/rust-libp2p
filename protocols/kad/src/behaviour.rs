@@ -748,10 +748,11 @@ where
     fn query_finished(&mut self, q: Query<QueryInner>, params: &mut impl PollParameters)
         -> Option<KademliaEvent>
     {
-        log::trace!("Query {:?} finished.", q.id());
+        log::info!("Query {:?} finished.", q.id());
         let result = q.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap { peer } => {
+                self.print_bucket_table();
                 let local_key = self.kbuckets.local_key().clone();
                 if &peer == local_key.preimage() {
                     // The lookup for the local key finished. To complete the bootstrap process,
