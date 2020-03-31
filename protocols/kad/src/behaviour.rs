@@ -1502,6 +1502,7 @@ where
             Self::OutEvent,
         >,
     > {
+        log::info!("Kademlia NetworkBehaviour poll");
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
