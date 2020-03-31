@@ -504,6 +504,7 @@ where
         // TODO: calculate weight for self?
         let record = ProviderRecord::new(key.clone(), self.kbuckets.local_key().preimage().clone());
         if let Err(err) = self.store.add_provider(record) {
+            log::error!("Error on add_provider to local storage {}: {:?}", bs58::encode(key.as_ref()).into_string(), err);
             self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                 KademliaEvent::StartProvidingResult(Err(
                     AddProviderError::LocalStorageError { key, cause: err }
@@ -748,8 +749,9 @@ where
     fn query_finished(&mut self, q: Query<QueryInner>, params: &mut impl PollParameters)
         -> Option<KademliaEvent>
     {
-        log::info!("Query {:?} finished.", q.id());
         let result = q.into_result();
+
+        log::info!("Query {} finished", format!("{:#?}", result.inner.info).lines().take(1).next().unwrap());
         match result.inner.info {
             QueryInfo::Bootstrap { peer } => {
                 self.print_bucket_table();
@@ -830,6 +832,7 @@ where
             }
 
             QueryInfo::AddProvider { key, context, .. } => {
+                log::info!("AddProvider finished {:?}!", context);
                 match context {
                     AddProviderContext::Publish => {
                         Some(KademliaEvent::StartProvidingResult(Ok(
