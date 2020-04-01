@@ -1124,56 +1124,56 @@ where
             let elems = bucket.iter().collect::<Vec<_>>();
             if elems.len() == 0 {
                 return None
-            } else {
-                let header = format!("Bucket {:?}, elements: {}", index.get(), elems.len());
-                let elems = elems.into_iter().map(|(node, status)| {
-                    let status_s = match status {
-                        NodeStatus::Connected => "C",
-                        NodeStatus::Disconnected => "D"
-                    };
-
-                    let address_s = node.value.addresses
-                        .iter()
-                        .next()
-                        .map(|ma|
-                            ma.iter().fold(String::new(), |acc, proto|
-                                match proto {
-                                    Ip4(addr) => format!("{}", addr),
-                                    Ip6(addr) => format!("{}", addr),
-                                    Tcp(port) => format!("{}:{}", acc, port),
-                                    _ => acc
-                                }
-                            )
-                        ).unwrap_or("NOADDR".to_string());
-
-                    let address_plus = node.value.addresses
-                        .len()
-                        .checked_sub(1)
-                        .filter(|l| *l != 0)
-                        .map(|l| format!(" (+{})", l))
-                        .unwrap_or("".to_string());
-
-                    let kademlia_key = bs58::encode(node.key.as_ref()).into_string();
-                    let len = kademlia_key.len();
-                    let kademlia_key = &kademlia_key[len - 10..];
-
-                    let peer_id = node.key.preimage().to_base58();
-                    let len = peer_id.len();
-                    let peer_id = &peer_id[len - 10..];
-
-                    format!(
-                        "\t{} {} {} {}{} {}\n",
-                        status_s,
-                        node.weight,
-                        peer_id,
-                        address_s,
-                        address_plus,
-                        kademlia_key
-                    )
-                }).collect::<String>();
-
-                Some(format!("{}\n{}\n", header, elems))
             }
+
+            let header = format!("Bucket {:?}, elements: {}", index.get(), elems.len());
+            let elems = elems.into_iter().map(|(node, status)| {
+                let status_s = match status {
+                    NodeStatus::Connected => "C",
+                    NodeStatus::Disconnected => "D"
+                };
+
+                let address_s = node.value.addresses
+                    .iter()
+                    .next()
+                    .map(|ma|
+                        ma.iter().fold(String::new(), |acc, proto|
+                            match proto {
+                                Ip4(addr) => format!("{}", addr),
+                                Ip6(addr) => format!("{}", addr),
+                                Tcp(port) => format!("{}:{}", acc, port),
+                                _ => acc
+                            }
+                        )
+                    ).unwrap_or("NOADDR".to_string());
+
+                let address_plus = node.value.addresses
+                    .len()
+                    .checked_sub(1)
+                    .filter(|l| *l != 0)
+                    .map(|l| format!(" (+{})", l))
+                    .unwrap_or("".to_string());
+
+                let kademlia_key = bs58::encode(node.key.as_ref()).into_string();
+                let len = kademlia_key.len();
+                let kademlia_key = &kademlia_key[len - 10..];
+
+                let peer_id = node.key.preimage().to_base58();
+                let len = peer_id.len();
+                let peer_id = &peer_id[len - 10..];
+
+                format!(
+                    "\t{} {} {} {}{} {}\n",
+                    status_s,
+                    node.weight,
+                    peer_id,
+                    address_s,
+                    address_plus,
+                    kademlia_key
+                )
+            }).collect::<String>();
+
+            Some(format!("{}\n{}\n", header, elems))
         }).collect::<String>();
 
         if buckets.trim().is_empty() {
