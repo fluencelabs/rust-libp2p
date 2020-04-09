@@ -1132,7 +1132,7 @@ where
                 return None
             }
 
-            let header = format!("[bcktdbg] Bucket {:?}, elements: {}", index.get(), elems.len());
+            let header = format!("Bucket {:?}, elements: {}", index.get(), elems.len());
             let elems = elems.into_iter().map(|(node, status)| {
                 let status_s = match status {
                     NodeStatus::Connected => "C",
@@ -1179,7 +1179,7 @@ where
                 )
             }).collect::<String>();
 
-            Some(format!("[bcktdbg] {}\n{}\n", header, elems))
+            Some(format!("[bcktdbg] {}\n[bcktdbg] {}\n", header, elems))
         }).collect::<String>();
 
         if buckets.trim().is_empty() {
