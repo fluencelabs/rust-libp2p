@@ -347,6 +347,8 @@ where
             },
             kbucket::Entry::SelfEntry => {},
         }
+
+        self.print_bucket_table();
     }
 
     /// Returns an iterator over all peer IDs of nodes currently contained in a bucket
@@ -699,6 +701,8 @@ where
             },
             _ => {}
         }
+
+        self.print_bucket_table();
     }
 
     fn insert_new_peer(
@@ -1552,6 +1556,7 @@ where
 
             // Drain applied pending entries from the routing table.
             if let Some(entry) = self.kbuckets.take_applied_pending() {
+                self.print_bucket_table();
                 let kbucket::Node { key, value, .. } = entry.inserted;
                 let event = KademliaEvent::RoutingUpdated {
                     peer: key.into_preimage(),
