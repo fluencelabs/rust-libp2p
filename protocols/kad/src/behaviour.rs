@@ -1128,7 +1128,7 @@ where
                 return None
             }
 
-            let header = format!("Bucket {:?}, elements: {}", index.get(), elems.len());
+            let header = format!("[bcktdbg] Bucket {:?}, elements: {}", index.get(), elems.len());
             let elems = elems.into_iter().map(|(node, status)| {
                 let status_s = match status {
                     NodeStatus::Connected => "C",
@@ -1175,11 +1175,11 @@ where
                 )
             }).collect::<String>();
 
-            Some(format!("{}\n{}\n", header, elems))
+            Some(format!("[bcktdbg] {}\n{}\n", header, elems))
         }).collect::<String>();
 
         if buckets.trim().is_empty() {
-            log::info!("Bucket table is empty.")
+            log::info!("[bcktdbg] Bucket table is empty.")
         } else {
             log::info!("\n{}", buckets);
         }
@@ -1507,7 +1507,6 @@ where
             Self::OutEvent,
         >,
     > {
-        log::info!("Kademlia NetworkBehaviour poll");
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
