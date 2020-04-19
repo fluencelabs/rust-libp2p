@@ -1169,7 +1169,7 @@ where
                 let peer_id = &peer_id[len - 10..];
 
                 format!(
-                    "\t{} {} {} {}{} {}\n",
+                    "[bcktdbg]\t{} {} {} {}{} {}\n",
                     status_s,
                     node.weight,
                     peer_id,
@@ -1179,7 +1179,7 @@ where
                 )
             }).collect::<String>();
 
-            Some(format!("[bcktdbg] {}\n[bcktdbg] {}\n", header, elems))
+            Some(format!("[bcktdbg] {}\n{}\n[bcktdbg]", header, elems))
         }).collect::<String>();
 
         if buckets.trim().is_empty() {
