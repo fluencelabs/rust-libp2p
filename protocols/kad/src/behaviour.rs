@@ -1179,7 +1179,7 @@ where
                 )
             }).collect::<String>();
 
-            Some(format!("[bcktdbg] {}\n{}\n[bcktdbg]", header, elems))
+            Some(format!("[bcktdbg] {}\n{}\n", header, elems))
         }).collect::<String>();
 
         if buckets.trim().is_empty() {
