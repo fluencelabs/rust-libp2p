@@ -29,6 +29,8 @@ use libp2p_core::PeerId;
 use crate::{ALPHA_VALUE, K_VALUE};
 use crate::kbucket::{Distance, Key, KeyBytes};
 
+use derivative::Derivative;
+
 use super::*;
 
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
@@ -487,7 +489,8 @@ impl Peer {
 }
 
 /// The state of a single `Peer`.
-#[derive(Debug, Copy, Clone)]
+#[derive(Derivative)]
+#[derivative(Debug, Copy, Clone)]
 enum PeerState {
     /// The peer has not yet been contacted.
     ///
@@ -495,7 +498,7 @@ enum PeerState {
     NotContacted,
 
     /// The iterator is waiting for a result from the peer.
-    Waiting(Instant),
+    Waiting(#[derivative(Debug="ignore")]Instant),
 
     /// A result was not delivered for the peer within the configured timeout.
     ///
