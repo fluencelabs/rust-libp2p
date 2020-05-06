@@ -333,7 +333,7 @@ impl ClosestPeersIter {
                                 format!("[iterlog] {}:\n{}", p.key.into_preimage(), log)
                             }).collect::<String>();
 
-                            trace!(
+                            log::info!(
                                 "[iterlog] ClosestPeerIter: target = {}; Got all {} results, finished. Log:\n",
                                 bs58::encode(&self.target).into_string(),
                                 *cnt
