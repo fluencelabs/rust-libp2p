@@ -334,9 +334,10 @@ impl ClosestPeersIter {
                             }).collect::<String>();
 
                             log::info!(
-                                "[iterlog] ClosestPeerIter: target = {}; Got all {} results, finished. Log:\n",
+                                "[iterlog] ClosestPeerIter: target = {}; Got all {} results, finished. Log:\n{}",
                                 bs58::encode(&self.target).into_string(),
-                                *cnt
+                                *cnt,
+                                log
                             );
                             self.state = State::Finished;
                             return PeersIterState::Finished
