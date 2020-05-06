@@ -328,8 +328,9 @@ impl ClosestPeersIter {
                         if *cnt >= self.config.num_results {
                             let mut log = closest.into_iter().map(|p| {
                                 let log = p.log.iter().map(|(i, s)| {
-                                    let elapsed = i.checked_duration_since(created_at).map_or("negative".to_string(), |d| d.as_millis().to_string());
-                                    format!("[iterlog] \t{: <25?} - +{}ms\n", s, elapsed)
+                                    // TODO: show negative difference?
+                                    let elapsed = i.saturating_duration_since(created_at).as_millis().to_string();
+                                    format!("[iterlog] \t{: <25?}\t+{}ms\n", s, elapsed)
                                 }).collect::<String>();
 
                                 format!("[iterlog] {}:\n{}", p.key.into_preimage(), log)
