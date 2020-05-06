@@ -324,7 +324,7 @@ impl ClosestPeersIter {
                         // If `num_results` successful results have been delivered for the
                         // closest peers, the iterator is done.
                         if *cnt >= self.config.num_results {
-                            let log = closest.into_iter().map(|p| {
+                            let mut log = closest.into_iter().map(|p| {
                                 let log = p.log.iter().map(|(i, s)| {
                                     let elapsed = i.checked_duration_since(created_at).map_or("negative".to_string(), |d| d.as_millis().to_string());
                                     format!("[iterlog] \t{: <25?} - +{}ms\n", s, elapsed)
@@ -332,6 +332,10 @@ impl ClosestPeersIter {
 
                                 format!("[iterlog] {}:\n{}", p.key.into_preimage(), log)
                             }).collect::<String>();
+
+                            if log.is_empty() {
+                                log = "[iterlog] empty".into();
+                            }
 
                             log::info!(
                                 "[iterlog] ClosestPeerIter: target = {}; Got all {} results, finished. Log:\n{}",
