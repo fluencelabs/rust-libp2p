@@ -379,26 +379,22 @@ impl ClosestPeersIter {
     pub fn finish(&mut self) {
         self.state = State::Finished;
         // let closest = self.closest_peers.values().cloned().collect::<Vec<Peer>>();
+        log::info!(
+            "[iterlog] ClosestPeerIter: target = {}; finished +{}ms. Log:\n",
+            self.created_at.elapsed().as_millis(),
+            bs58::encode(&self.target).into_string(),
+        );
+
         let created_at = self.created_at;
-        let mut log = self.closest_peers.iter().map(|(_, p)| {
-            let log = p.log.iter().map(|(i, s)| {
+        self.closest_peers.iter().for_each(|(_, p)| {
+            log::info!("[iterlog] {}:\n", p.key.preimage());
+            p.log.iter().for_each(|(i, s)| {
                 // TODO: show negative difference?
                 let elapsed = i.saturating_duration_since(created_at).as_millis().to_string();
-                format!("[iterlog] \t{: <25?}\t+{}ms\n", s, elapsed)
-            }).collect::<String>();
+                log::info!("[iterlog] \t{: <45?}\t+{}ms\n", s, elapsed)
+            });
+        });
 
-            format!("[iterlog] {}:\n{}", p.key.preimage(), log)
-        }).collect::<String>();
-
-        if log.is_empty() {
-            log = "[iterlog] empty".into();
-        }
-
-        log::info!(
-            "[iterlog] ClosestPeerIter: target = {}; finished. Log:\n{}",
-            bs58::encode(&self.target).into_string(),
-            log
-        );
     }
 
     /// Checks whether the iterator has finished.
