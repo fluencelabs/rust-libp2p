@@ -381,8 +381,8 @@ impl ClosestPeersIter {
         // let closest = self.closest_peers.values().cloned().collect::<Vec<Peer>>();
         log::info!(
             "[iterlog] ClosestPeerIter: target = {}; finished +{}ms. Log:\n",
-            self.created_at.elapsed().as_millis(),
             bs58::encode(&self.target).into_string(),
+            self.created_at.elapsed().as_millis(),
         );
 
         let created_at = self.created_at;
