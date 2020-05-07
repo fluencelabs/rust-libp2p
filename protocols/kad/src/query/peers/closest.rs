@@ -282,9 +282,6 @@ impl ClosestPeersIter {
         // Check if the iterator is at capacity w.r.t. the allowed parallelism.
         let at_capacity = self.at_capacity();
 
-        let closest = self.closest_peers.values().cloned().collect::<Vec<Peer>>();
-        let created_at = self.created_at;
-
         for peer in self.closest_peers.values_mut() {
             match peer.state {
                 PeerState::Waiting(timeout) => {
@@ -326,25 +323,10 @@ impl ClosestPeersIter {
                         // If `num_results` successful results have been delivered for the
                         // closest peers, the iterator is done.
                         if *cnt >= self.config.num_results {
-                            let mut log = closest.into_iter().map(|p| {
-                                let log = p.log.iter().map(|(i, s)| {
-                                    // TODO: show negative difference?
-                                    let elapsed = i.saturating_duration_since(created_at).as_millis().to_string();
-                                    format!("[iterlog] \t{: <25?}\t+{}ms\n", s, elapsed)
-                                }).collect::<String>();
-
-                                format!("[iterlog] {}:\n{}", p.key.into_preimage(), log)
-                            }).collect::<String>();
-
-                            if log.is_empty() {
-                                log = "[iterlog] empty".into();
-                            }
-
-                            log::info!(
-                                "[iterlog] ClosestPeerIter: target = {}; Got all {} results, finished. Log:\n{}",
+                            trace!(
+                                "ClosestPeerIter: target = {}; {} peers responded, finished.",
                                 bs58::encode(&self.target).into_string(),
-                                *cnt,
-                                log
+                                *cnt
                             );
                             self.state = State::Finished;
                             return PeersIterState::Finished
@@ -395,7 +377,28 @@ impl ClosestPeersIter {
 
     /// Immediately transitions the iterator to [`PeersIterState::Finished`].
     pub fn finish(&mut self) {
-        self.state = State::Finished
+        self.state = State::Finished;
+        // let closest = self.closest_peers.values().cloned().collect::<Vec<Peer>>();
+        let created_at = self.created_at;
+        let mut log = self.closest_peers.iter().map(|(_, p)| {
+            let log = p.log.iter().map(|(i, s)| {
+                // TODO: show negative difference?
+                let elapsed = i.saturating_duration_since(created_at).as_millis().to_string();
+                format!("[iterlog] \t{: <25?}\t+{}ms\n", s, elapsed)
+            }).collect::<String>();
+
+            format!("[iterlog] {}:\n{}", p.key.preimage(), log)
+        }).collect::<String>();
+
+        if log.is_empty() {
+            log = "[iterlog] empty".into();
+        }
+
+        log::info!(
+            "[iterlog] ClosestPeerIter: target = {}; finished. Log:\n{}",
+            bs58::encode(&self.target).into_string(),
+            log
+        );
     }
 
     /// Checks whether the iterator has finished.
