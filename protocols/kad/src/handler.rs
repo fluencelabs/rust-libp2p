@@ -832,11 +832,11 @@ fn advance_substream<TUserData>(
                 false,
             ),
             Poll::Ready(None) => {
-                warn!("Inbound substream id {:?} cx {:?}: EOF", id, cx);
+                warn!("Inbound substream id {:?}: EOF", id);
                 (None, None, false)
             }
             Poll::Ready(Some(Err(e))) => {
-                warn!("Inbound substream error id {:?} cx {:?}: {:?}", id, cx, e);
+                warn!("Inbound substream error id {:?}: {:?}", id, e);
                 (None, None, false)
             },
         },
