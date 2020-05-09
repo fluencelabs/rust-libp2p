@@ -391,7 +391,7 @@ impl ClosestPeersIter {
             p.log.iter().for_each(|(i, s)| {
                 // TODO: show negative difference?
                 let elapsed = i.saturating_duration_since(created_at).as_millis().to_string();
-                log::info!("[iterlog] \t{: <45?}\t+{}ms\n", s, elapsed)
+                log::info!("[iterlog] \t{: <45?}\t+{}ms", s, elapsed)
             });
         });
 
