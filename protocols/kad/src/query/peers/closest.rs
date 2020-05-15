@@ -385,6 +385,11 @@ impl ClosestPeersIter {
             self.created_at.elapsed().as_millis(),
         );
 
+        if self.created_at.elapsed().as_millis() >= 10000 {
+            let trace = backtrace::Backtrace::new();
+            println!("\n\n\ntimeout backtrace:\n{:?}\n\n\n", trace);
+        }
+
         let created_at = self.created_at;
         self.closest_peers.iter().for_each(|(_, p)| {
             log::info!("[iterlog] {}:\n", p.key.preimage());
