@@ -114,6 +114,9 @@ impl BucketIndex {
     /// `local_key` is the `local_key` itself, which does not belong in any
     /// bucket.
     fn new(d: &Distance) -> Option<BucketIndex> {
+        // local  = 101010101010;
+        // target = 101010101011;
+        // xor    = 000000000001;
         (NUM_BUCKETS - d.0.leading_zeros() as usize)
             .checked_sub(1)
             .map(BucketIndex)
@@ -339,11 +342,12 @@ struct ClosestBucketsIter {
 }
 
 /// Operating states of a `ClosestBucketsIter`.
+#[derive(Debug)]
 enum ClosestBucketsIterState {
     /// The starting state of the iterator yields the first bucket index and
     /// then transitions to `ZoomIn`.
     Start(BucketIndex),
-    /// The iterator "zooms in" to to yield the next bucket cotaining nodes that
+    /// The iterator "zooms in" to to yield the next bucket containing nodes that
     /// are incrementally closer to the local node but further from the `target`.
     /// These buckets are identified by a `1` in the corresponding bit position
     /// of the distance bit string. When bucket `0` is reached, the iterator
@@ -365,12 +369,15 @@ impl ClosestBucketsIter {
             Some(i) => ClosestBucketsIterState::Start(i),
             None => ClosestBucketsIterState::Start(BucketIndex(0)),
         };
+        // println!("ClosestBucketsIter new: distance {} {}, state {:?}", Self::u256_binary(&distance.0, 256), distance.0.leading_zeros(), state);
         Self { distance, state }
     }
 
-    fn next_in(&self, i: BucketIndex) -> Option<BucketIndex> {
-        (0..i.get()).rev().find_map(|i| {
-            if self.distance.0.bit(i) {
+    fn next_in(&self, idx: BucketIndex) -> Option<BucketIndex> {
+        (0..idx.get()).rev().find_map(|i| {
+            let bit = self.distance.0.bit(i);
+            if bit {
+                // println!("next_in  {} [{}th = {}] bucket_idx: {:?}", Self::u256_binary(&self.distance.0, i), i, (bit as usize), idx);
                 Some(BucketIndex(i))
             } else {
                 None
@@ -378,14 +385,31 @@ impl ClosestBucketsIter {
         })
     }
 
-    fn next_out(&self, i: BucketIndex) -> Option<BucketIndex> {
-        (i.get() + 1..NUM_BUCKETS).find_map(|i| {
-            if !self.distance.0.bit(i) {
+    fn next_out(&self, idx: BucketIndex) -> Option<BucketIndex> {
+        (idx.get() + 1..NUM_BUCKETS).find_map(|i| {
+            let bit = self.distance.0.bit(i);
+            if !bit {
+                // println!("next_out {} [{}th = !{}] bucket_idx: {:?}", Self::u256_binary(&self.distance.0, i), i, (bit as usize), idx);
                 Some(BucketIndex(i))
             } else {
                 None
             }
         })
+    }
+
+    fn u256_binary(u: &U256, highlight: usize) -> String {
+        let mut arr: [u8; 256] = [0; 256];
+        for i in 0..256 {
+            arr[i] = u.bit(i) as u8;
+        }
+
+        arr.iter().enumerate().map(|(i, u)| {
+            if i == highlight {
+                format!("-[{}]-", u)
+            } else {
+                u.to_string()
+            }
+        }).collect()
     }
 }
 
@@ -395,55 +419,29 @@ impl Iterator for ClosestBucketsIter {
     fn next(&mut self) -> Option<Self::Item> {
         match self.state {
             ClosestBucketsIterState::Start(i) => {
-                debug!(
-                    "ClosestBucketsIter: distance = {}; Start({}) -> ZoomIn({})",
-                    BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0, i.0, i.0
-                );
                 self.state = ClosestBucketsIterState::ZoomIn(i);
                 Some(i)
             }
             ClosestBucketsIterState::ZoomIn(i) => {
-                let old_i = i.0;
                 if let Some(i) = self.next_in(i) {
-                    debug!(
-                        "ClosestBucketsIter: distance = {}; ZoomIn({}) -> ZoomIn({})",
-                        BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0, old_i, i.0
-                    );
                     self.state = ClosestBucketsIterState::ZoomIn(i);
                     Some(i)
                 } else {
-                    debug!(
-                        "ClosestBucketsIter: distance = {}; ZoomIn({}) -> ZoomOut(0)",
-                        BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0, i.0
-                    );
                     let i = BucketIndex(0);
                     self.state = ClosestBucketsIterState::ZoomOut(i);
                     Some(i)
                 }
             }
             ClosestBucketsIterState::ZoomOut(i) => {
-                let old_i = i.0;
                 if let Some(i) = self.next_out(i) {
-                    debug!(
-                        "ClosestBucketsIter: distance = {}; ZoomOut({}) -> ZoomOut({})",
-                        BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0, old_i, i.0
-                    );
                     self.state = ClosestBucketsIterState::ZoomOut(i);
                     Some(i)
                 } else {
-                    debug!(
-                        "ClosestBucketsIter: distance = {}; ZoomOut({}) -> Done",
-                        BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0, i.0
-                    );
                     self.state = ClosestBucketsIterState::Done;
                     None
                 }
             }
             ClosestBucketsIterState::Done => {
-                debug!(
-                    "ClosestBucketsIter: distance = {}; Done",
-                    BucketIndex::new(&self.distance).unwrap_or(BucketIndex(0)).0
-                );
                 None
             },
         }
