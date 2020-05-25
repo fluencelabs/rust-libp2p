@@ -117,7 +117,8 @@ impl ClosestPeersIter {
                     let log = vec![(Instant::now(), state.clone())];
                     (distance, Peer { key, state, log })
                 })
-                .take(K_VALUE.into()));
+                .take(K_VALUE.into())
+        );
 
         // The iterator initially makes progress by iterating towards the target.
         let state = State::Iterating { no_progress : 0 };
@@ -161,7 +162,10 @@ impl ClosestPeersIter {
 
         // Mark the peer as succeeded.
         match self.closest_peers.entry(distance) {
-            Entry::Vacant(..) => return false,
+            Entry::Vacant(..) => {
+                log::warn!("peer {} not found in closest_peers, ignoring result", peer);
+                return false
+            },
             Entry::Occupied(mut e) => match e.get().state {
                 PeerState::Waiting(..) => {
                     debug_assert!(self.num_waiting > 0);
@@ -173,7 +177,10 @@ impl ClosestPeersIter {
                 }
                 PeerState::NotContacted
                     | PeerState::Failed
-                    | PeerState::Succeeded => return false
+                    | PeerState::Succeeded => {
+                    log::warn!("peer {} is incorrect state {:?}, ignoring result", peer, e.get().state);
+                    return false
+                }
             }
         }
 
@@ -470,6 +477,8 @@ enum State {
     /// results is increased to `num_results` in an attempt to finish the iterator.
     /// If the iterator can make progress again upon receiving the remaining
     /// results, it switches back to `Iterating`. Otherwise it will be finished.
+    ///
+    /// // TODO: is it used?
     Stalled,
 
     /// The iterator is finished.
