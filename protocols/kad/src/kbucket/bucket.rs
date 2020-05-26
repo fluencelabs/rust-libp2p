@@ -37,6 +37,7 @@ pub struct KBucket<TKey, TVal> {
     swamp: Swamp<TKey, TVal>,
     weighted: Weighted<TKey, TVal>,
     pending_timeout: Duration,
+    pub(super) index: BucketIndex,
 }
 
 /*
@@ -124,7 +125,7 @@ where
     TVal: Clone,
 {
     /// Creates a new `KBucket` with the given timeout for pending entries.
-    pub fn new(pending_timeout: Duration) -> Self {
+    pub fn new(pending_timeout: Duration, idx: BucketIndex) -> Self {
         KBucket {
             swamp: Swamp::new(pending_timeout),
             weighted: Weighted::new(pending_timeout),

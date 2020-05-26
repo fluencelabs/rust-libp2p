@@ -72,6 +72,7 @@ mod key;
 mod sub_bucket;
 mod swamp;
 mod weighted;
+mod weighted_iter;
 
 pub use entry::*;
 pub use sub_bucket::*;
@@ -83,9 +84,6 @@ use std::fmt::Debug;
 use std::time::Duration;
 use libp2p_core::identity::ed25519;
 use log::debug;
-use std::sync::Arc;
-use std::rc::Rc;
-use std::ops::{Deref, DerefMut};
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
@@ -97,7 +95,7 @@ pub struct KBucketsTable<TKey, TVal> {
     /// The key identifying the local peer that owns the routing table.
     local_key: TKey,
     /// The buckets comprising the routing table.
-    buckets: Vec<KBucket<TKey, TVal>>,
+    pub(super) buckets: Vec<KBucket<TKey, TVal>>,
     /// The list of evicted entries that have been replaced with pending
     /// entries since the last call to [`KBucketsTable::take_applied_pending`].
     applied_pending: VecDeque<AppliedPending<TKey, TVal>>,
@@ -161,7 +159,7 @@ where
             local_kp,
             local_key,
             buckets: (0..NUM_BUCKETS)
-                .map(|_| KBucket::new(pending_timeout))
+                .map(|idx| KBucket::new(pending_timeout, BucketIndex(idx)))
                 .collect(),
             applied_pending: VecDeque::new(),
         }
@@ -345,59 +343,6 @@ where
     }
 }
 
-struct WeightedIter<'a, TTarget, TKey, TVal, TMapW, TMapS, TOut> {
-    weighted: ClosestIter<'a, TTarget, TKey, TVal, TMapW, TOut>,
-    swamp: ClosestIter<'a, TTarget, TKey, TVal, TMapS, TOut>
-}
-
-impl<'a, TTarget, TKey, TVal, TMapW, TMapS, TOut> WeightedIter<'a, TTarget, TKey, TVal, TMapW, TMapS, TOut> {
-    pub fn new(table: &'a KBucketsTable<TKey, TVal>, target: &'a TKey, distance: Distance) -> impl Iterator<Item = TKey> + 'a
-        where
-            TKey: Clone + AsRef<KeyBytes>,
-            TVal: Clone,
-    {
-        let wtf = Rc::new(table);
-        let mut table1 = Rc::clone(&wtf);
-        let mut table2 = Rc::clone(&wtf);
-
-        let weighted = ClosestIter {
-            target,
-            iter: None,
-            table: Rc::make_mut(&mut table1),
-            buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<TKey, TVal>| -> Vec<_> {
-                b.weighted().map(|(n, _)| n.key.clone()).collect()
-            },
-        };
-
-        let swamp = ClosestIter {
-            target,
-            iter: None,
-            table: Rc::make_mut(&mut table2),
-            buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<TKey, TVal>| -> Vec<_> {
-                b.swamp().map(|(n, _)| n.key.clone()).collect()
-            },
-        };
-
-        // let w_target = 16;
-        // let s_target = 4;
-
-        WeightedIter {
-            weighted,
-            swamp
-        }
-    }
-}
-
-impl<'a, TTarget, TKey, TVal, TMapW, TMapS, TOut> Iterator for WeightedIter<'a, TTarget, TKey, TVal, TMapW, TMapS, TOut> {
-    type Item = TOut;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        unimplemented!()
-    }
-}
-
 /// An iterator over (some projection of) the closest entries in a
 /// `KBucketsTable` w.r.t. some target `Key`.
 struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
@@ -421,7 +366,7 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
 /// An iterator over the bucket indices, in the order determined by the `Distance` of
 /// a target from the `local_key`, such that the entries in the buckets are incrementally
 /// further away from the target, starting with the bucket covering the target.
-struct ClosestBucketsIter {
+pub(super) struct ClosestBucketsIter {
     /// The distance to the `local_key`.
     distance: Distance,
     /// The current state of the iterator.
@@ -451,7 +396,7 @@ enum ClosestBucketsIterState {
 }
 
 impl ClosestBucketsIter {
-    fn new(distance: Distance) -> Self {
+    pub(super) fn new(distance: Distance) -> Self {
         let state = match BucketIndex::new(&distance) {
             Some(i) => ClosestBucketsIterState::Start(i),
             None => ClosestBucketsIterState::Start(BucketIndex(0)),
