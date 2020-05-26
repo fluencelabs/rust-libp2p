@@ -83,6 +83,9 @@ use std::fmt::Debug;
 use std::time::Duration;
 use libp2p_core::identity::ed25519;
 use log::debug;
+use std::sync::Arc;
+use std::rc::Rc;
+use std::ops::{Deref, DerefMut};
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
@@ -252,6 +255,35 @@ where
         }
     }
 
+    // pub fn weighted_closest<'a, T>(&'a mut self, target: &'a T) -> impl Iterator<Item = TKey> + 'a
+    //     where
+    //         T: Clone + AsRef<KeyBytes>,
+    // {
+    //     let distance = self.local_key.as_ref().distance(target);
+    //     let weighted = ClosestIter {
+    //         target,
+    //         iter: None,
+    //         table: self,
+    //         buckets_iter: ClosestBucketsIter::new(distance),
+    //         fmap: |b: &KBucket<TKey, _>| -> Vec<_> {
+    //             b.weighted().map(|(n, _)| n.key.clone()).collect()
+    //         },
+    //     };
+    //
+    //     let swamp = ClosestIter {
+    //         target,
+    //         iter: None,
+    //         table: self,
+    //         buckets_iter: ClosestBucketsIter::new(distance),
+    //         fmap: |b: &KBucket<TKey, _>| -> Vec<_> {
+    //             b.swamp().map(|(n, _)| n.key.clone()).collect()
+    //         },
+    //     };
+    //
+    //     let w_target = 16;
+    //     let s_target = 4;
+    // }
+
     /// Returns an iterator over the nodes closest to the `target` key, ordered by
     /// increasing distance.
     pub fn closest<'a, T>(
@@ -310,6 +342,59 @@ where
         } else {
             0
         }
+    }
+}
+
+struct WeightedIter<'a, TTarget, TKey, TVal, TMapW, TMapS, TOut> {
+    weighted: ClosestIter<'a, TTarget, TKey, TVal, TMapW, TOut>,
+    swamp: ClosestIter<'a, TTarget, TKey, TVal, TMapS, TOut>
+}
+
+impl<'a, TTarget, TKey, TVal, TMapW, TMapS, TOut> WeightedIter<'a, TTarget, TKey, TVal, TMapW, TMapS, TOut> {
+    pub fn new(table: &'a KBucketsTable<TKey, TVal>, target: &'a TKey, distance: Distance) -> impl Iterator<Item = TKey> + 'a
+        where
+            TKey: Clone + AsRef<KeyBytes>,
+            TVal: Clone,
+    {
+        let wtf = Rc::new(table);
+        let mut table1 = Rc::clone(&wtf);
+        let mut table2 = Rc::clone(&wtf);
+
+        let weighted = ClosestIter {
+            target,
+            iter: None,
+            table: Rc::make_mut(&mut table1),
+            buckets_iter: ClosestBucketsIter::new(distance),
+            fmap: |b: &KBucket<TKey, TVal>| -> Vec<_> {
+                b.weighted().map(|(n, _)| n.key.clone()).collect()
+            },
+        };
+
+        let swamp = ClosestIter {
+            target,
+            iter: None,
+            table: Rc::make_mut(&mut table2),
+            buckets_iter: ClosestBucketsIter::new(distance),
+            fmap: |b: &KBucket<TKey, TVal>| -> Vec<_> {
+                b.swamp().map(|(n, _)| n.key.clone()).collect()
+            },
+        };
+
+        // let w_target = 16;
+        // let s_target = 4;
+
+        WeightedIter {
+            weighted,
+            swamp
+        }
+    }
+}
+
+impl<'a, TTarget, TKey, TVal, TMapW, TMapS, TOut> Iterator for WeightedIter<'a, TTarget, TKey, TVal, TMapW, TMapS, TOut> {
+    type Item = TOut;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unimplemented!()
     }
 }
 
