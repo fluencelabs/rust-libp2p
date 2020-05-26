@@ -18,6 +18,7 @@ use crate::kbucket::{
     BucketIndex, ClosestBucketsIter, Distance, KBucketsTable, KeyBytes, Node, NodeStatus,
 };
 
+#[derive(Copy, Clone)]
 struct Progress {
     need: usize,
     got: usize,
@@ -28,8 +29,9 @@ enum State {
     Weighted(Progress),
     Swamp {
         /// After taking one element from swamp, go back to weighted, keeping saved progress
-        saved: Progress,
+        saved: Option<Progress>,
     },
+    Empty,
 }
 
 struct WeightedIter<'a, TKey, TVal> {
@@ -145,11 +147,11 @@ where
                         }
                     } else {
                         // No weighted buckets, go to swamp
-                        (Swamp, None)
+                        (Swamp { saved: None }, None)
                     }
                 }
                 // Iterating through weighted, need more
-                Weighted(Progress { got, need }) if got < need => {
+                Weighted(&Progress { got, need }) if got < need => {
                     if let Some(elem) = self.next_weighted() {
                         // Found weighted element, go take more
                         let state = Weighted(Progress { got: got + 1, need });
@@ -160,21 +162,38 @@ where
                     }
                 }
                 // Got enough weighted, go to swamp (saving progress, to return back with it)
-                Weighted(progress) => (Swamp { saved: progress }, None),
+                Weighted(&progress) => (
+                    Swamp {
+                        saved: Some(progress),
+                    },
+                    None,
+                ),
                 // Take one element from swamp, and go to Weighted
-                Swamp { saved } => {
-                    if let Some(mut iter) = self.next_swamp_bucket() {
-                        if let Some(elem) = iter.next() {
-                            // We always take just a single element from the swamp
-                            // And then go back to weighted
-                            (Weighted(saved), Some(elem))
-                        } else {
-                            // This bucket was empty, go try next one
-                            (Swamp { saved }, None)
-                        }
+                Swamp {
+                    saved: Some(&saved),
+                } => {
+                    if let Some(elem) = self.next_swamp() {
+                        // We always take just a single element from the swamp
+                        // And then go back to weighted
+                        (Weighted(saved), Some(elem))
+                    } else if self.next_swamp_bucket().is_some() {
+                        // Current bucket was empty, go try next one
+                        (Swamp { saved: Some(saved) }, None)
                     } else {
-                        // No more swamp buckets. Routing table must be empty at this point? No
-                        // TODO: go to SwampEmpty, and drain weighted buckets
+                        // No more swamp buckets, go drain weighted
+                        (Weighted(saved), None)
+                    }
+                }
+                // Weighted buckets are empty
+                &Swamp { saved } => {
+                    if let Some(elem) = self.next_swamp() {
+                        (Swamp { saved }, Some(elem))
+                    } else if self.next_swamp_bucket().is_some() {
+                        // Current bucket was empty, go try next one
+                        (Swamp { saved }, None)
+                    } else {
+                        // Routing table is empty
+                        (Empty, None)
                     }
                 }
             };
@@ -184,9 +203,11 @@ where
             if result.is_some() {
                 return result;
             }
-        }
 
-        None
+            if let state = Empty {
+                return None;
+            }
+        }
     }
 }
 
