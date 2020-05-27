@@ -247,16 +247,7 @@ where
         T: Clone + AsRef<KeyBytes>,
     {
         let distance = self.local_key.as_ref().distance(target);
-        WeightedIter::new(self, distance).map(|(n, _)| n.key.clone())
-        // ClosestIter {
-        //     target,
-        //     iter: None,
-        //     table: self,
-        //     buckets_iter: ClosestBucketsIter::new(distance),
-        //     fmap: |b: &KBucket<TKey, _>| -> Vec<_> {
-        //         b.iter().map(|(n, _)| n.key.clone()).collect()
-        //     },
-        // }
+        WeightedIter::new(self, distance, target.as_ref()).map(|(n, _)| n.key.clone())
     }
 
     /// Returns an iterator over the nodes closest to the `target` key, ordered by
@@ -270,21 +261,7 @@ where
         TVal: Clone,
     {
         let distance = self.local_key.as_ref().distance(target);
-        // ClosestIter {
-        //     target,
-        //     iter: None,
-        //     table: self,
-        //     buckets_iter: ClosestBucketsIter::new(distance),
-        //     fmap: |b: &KBucket<_, TVal>| -> Vec<_> {
-        //         b.iter()
-        //             .map(|(n, status)| EntryView {
-        //                 node: n.clone(),
-        //                 status,
-        //             })
-        //             .collect()
-        //     },
-        // }
-        WeightedIter::new(self, distance).map(|(n, status)| EntryView {
+        WeightedIter::new(self, distance, target.as_ref()).map(|(n, status)| EntryView {
             node: n.clone(),
             status,
         })
