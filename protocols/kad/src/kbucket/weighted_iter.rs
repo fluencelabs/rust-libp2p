@@ -35,7 +35,7 @@ enum State {
     Empty,
 }
 
-struct WeightedIter<'a, TKey, TVal> {
+pub struct WeightedIter<'a, TKey, TVal> {
     start: BucketIndex,
     weighted_buckets: ClosestBucketsIter,
     weighted_iter: Option<Box<dyn Iterator<Item = (&'a Node<TKey, TVal>, NodeStatus)> + 'a>>,
