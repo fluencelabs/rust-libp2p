@@ -39,12 +39,15 @@ pub struct WeightedIter<'a, TKey, TVal> {
     target: &'a KeyBytes,
     start: BucketIndex,
     weighted_buckets: ClosestBucketsIter,
-    weighted_iter: Option<Box<dyn Iterator<Item = (&'a Node<TKey, TVal>, NodeStatus)> + 'a>>,
+    weighted_iter: Option<DynIter<'a, TKey, TVal>>,
     swamp_buckets: ClosestBucketsIter,
-    swamp_iter: Option<Box<dyn Iterator<Item = (&'a Node<TKey, TVal>, NodeStatus)> + 'a>>,
+    swamp_iter: Option<DynIter<'a, TKey, TVal>>,
     table: &'a KBucketsTable<TKey, TVal>, // TODO: make table &mut and call apply_pending?
     state: State,
 }
+
+type Entry<'a, TKey, TVal> = (&'a Node<TKey, TVal>, NodeStatus);
+type DynIter<'a, TKey, TVal> = Box<dyn Iterator<Item = (&'a Node<TKey, TVal>, NodeStatus)> + 'a>;
 
 impl<'a, TKey, TVal> WeightedIter<'a, TKey, TVal>
 where
@@ -55,7 +58,7 @@ where
         table: &'a KBucketsTable<TKey, TVal>,
         distance: Distance,
         target: &'a KeyBytes,
-    ) -> impl Iterator<Item = (&'a Node<TKey, TVal>, NodeStatus)> + 'a
+    ) -> impl Iterator<Item = Entry<'a, TKey, TVal>> + 'a
     where
         TKey: Clone + AsRef<KeyBytes>,
         TVal: Clone,
@@ -82,45 +85,33 @@ where
     }
 
     // Take iterator for next weighted bucket, save it to self.weighted_iter, and return
-    pub fn next_weighted_bucket(
-        &mut self,
-    ) -> Option<(
-        BucketIndex,
-        &'_ mut Box<dyn Iterator<Item = (&'a Node<TKey, TVal>, NodeStatus)> + 'a>,
-    )> {
-        if let Some(idx) = self.weighted_buckets.next() {
-            let bucket = self.table.buckets.get(idx.get());
-            let v = bucket.map(|b| self.sort_bucket(b.weighted().collect::<Vec<_>>()));
-            log::info!(
-                "next weighted bucket: {:?} exists? {} {}",
-                idx,
-                bucket.is_some(),
-                v.is_some()
-            );
-            self.weighted_iter = v;
-            // self.weighted_iter = bucket.map(|b| Box::new(b.weighted()) as _);
-            self.weighted_iter.as_mut().map(|iter| (idx, iter))
-        } else {
-            None
-        }
+    pub fn next_weighted_bucket(&mut self) -> Option<(BucketIndex, &mut DynIter<'a, TKey, TVal>)> {
+        let idx = self.weighted_buckets.next()?;
+        let bucket = self.table.buckets.get(idx.get());
+        let v = bucket.map(|b| self.sort_bucket(b.weighted().collect::<Vec<_>>()));
+        log::info!(
+            "next weighted bucket: {:?} exists? {} {}",
+            idx,
+            bucket.is_some(),
+            v.is_some()
+        );
+        self.weighted_iter = v;
+        // self.weighted_iter = bucket.map(|b| Box::new(b.weighted()) as _);
+        self.weighted_iter.as_mut().map(|iter| (idx, iter))
     }
 
     // Take next weighted element, return None when there's no weighted elements
-    pub fn next_weighted(&mut self) -> Option<(&'a Node<TKey, TVal>, NodeStatus)> {
+    pub fn next_weighted(&mut self) -> Option<Entry<'a, TKey, TVal>> {
         // Take current weighted_iter or the next one
-
         if let Some(iter) = self.weighted_iter.as_deref_mut() {
-            iter.next()
-        } else if let Some(iter) = self.next_weighted_bucket().map(|(_, i)| i) {
-            iter.next()
-        } else {
-            None
+            return iter.next();
         }
+
+        let iter = self.next_weighted_bucket().map(|(_, i)| i)?;
+        iter.next()
     }
 
-    pub fn next_swamp_bucket(
-        &mut self,
-    ) -> Option<&'_ mut Box<dyn Iterator<Item = (&'a Node<TKey, TVal>, NodeStatus)> + 'a>> {
+    pub fn next_swamp_bucket(&mut self) -> Option<&'_ mut DynIter<'a, TKey, TVal>> {
         if let Some(idx) = self.swamp_buckets.next() {
             let bucket = self.table.buckets.get(idx.get());
             let v = bucket.map(|b| self.sort_bucket(b.swamp().collect::<Vec<_>>()));
@@ -138,27 +129,19 @@ where
         }
     }
 
-    pub fn next_swamp(&mut self) -> Option<(&'a Node<TKey, TVal>, NodeStatus)> {
-        // let mut iter = self.swamp_iter.as_mut().or(self.next_swamp_bucket())?;
+    pub fn next_swamp(&mut self) -> Option<Entry<'a, TKey, TVal>> {
+        // let iter = self.swamp_iter.as_mut().or(self.next_swamp_bucket())?;
+
         if let Some(iter) = self.swamp_iter.as_deref_mut() {
-            iter.next()
-        } else if let Some(iter) = self.next_swamp_bucket() {
-            iter.next()
-        } else {
-            None
+            return iter.next();
         }
+
+        let iter = self.next_swamp_bucket()?;
+        iter.next()
     }
 
-    pub fn sort_bucket(
-        &self,
-        mut bucket: Vec<(&'a Node<TKey, TVal>, NodeStatus)>,
-    ) -> Box<dyn Iterator<Item = (&'a Node<TKey, TVal>, NodeStatus)> + 'a> {
-        bucket.sort_by(|(a, _), (b, _)| {
-            Ord::cmp(
-                &self.target.distance(a.key.as_ref()),
-                &self.target.distance(b.key.as_ref()),
-            )
-        });
+    pub fn sort_bucket(&self, mut bucket: Vec<Entry<'a, TKey, TVal>>) -> DynIter<'a, TKey, TVal> {
+        bucket.sort_by_cached_key(|(e, _)| self.target.distance(e.key.as_ref()));
 
         Box::new(bucket.into_iter())
     }
@@ -169,7 +152,7 @@ where
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone,
 {
-    type Item = (&'a Node<TKey, TVal>, NodeStatus);
+    type Item = Entry<'a, TKey, TVal>;
 
     fn next(&mut self) -> Option<Self::Item> {
         use State::*;
@@ -179,12 +162,10 @@ where
                 // Not yet started, or just finished a bucket
                 // Here we decide where to go next
                 Nowhere => {
-                    log::info!("Here we decide where to go next");
                     // If there is a weighted bucket, try take element from it
                     if let Some((idx, iter)) = self.next_weighted_bucket() {
                         if let Some(elem) = iter.next() {
                             // Found weighted element
-                            log::info!("Found weighted element");
                             let state = Weighted(Progress {
                                 got: 1,
                                 need: self.num_weighted(idx),
@@ -192,31 +173,26 @@ where
                             (state, Some(elem))
                         } else {
                             // Weighted bucket was empty: go decide again
-                            log::info!("Weighted bucket was empty: go decide again");
                             (Nowhere, None)
                         }
                     } else {
                         // There are no weighted buckets, go to swamp
-                        log::info!("There are no weighted buckets, go to swamp");
                         (Swamp { saved: None }, None)
                     }
                 }
                 // Iterating through a weighted bucket, need more elements
                 Weighted(Progress { got, need }) if got < need => {
-                    log::info!("Iterating through a weighted bucket, need more elements");
                     if let Some(elem) = self.next_weighted() {
                         // Found weighted element, go take more
                         let state = Weighted(Progress { got: got + 1, need });
                         (state, Some(elem))
                     } else {
                         // Current bucket is empty, we're nowhere: need to decide where to go next
-                        log::info!("Current bucket is empty, we're nowhere: need to decide where to go next");
                         (Nowhere, None)
                     }
                 }
                 // Got enough weighted, go to swamp (saving progress, to return back with it)
                 Weighted(Progress { need, .. }) => {
-                    log::info!("Got enough weighted, go to swamp");
                     (
                         Swamp {
                             // Set 'got' to zero, so when we get element from swarm, we start afresh
@@ -231,25 +207,20 @@ where
                 } => {
                     saved.got = 0;
 
-                    log::info!("Take one element from swamp, and go to Weighted");
                     if let Some(elem) = self.next_swamp() {
                         // We always take just a single element from the swamp
                         // And then go back to weighted
-                        log::info!("Got swamp element, go to weighted");
                         (Weighted(saved), Some(elem))
                     } else if self.next_swamp_bucket().is_some() {
                         // Current bucket was empty, take next one
-                        log::info!("Current swamp bucket was empty, take next one");
                         (Swamp { saved: Some(saved) }, None)
                     } else {
                         // No more swamp buckets, go drain weighted
-                        log::info!("No more swamp buckets, go drain weighted");
                         (Weighted(saved), None)
                     }
                 }
                 // Weighted buckets are empty
                 Swamp { saved } => {
-                    log::info!("Weighted buckets are empty");
                     if let Some(elem) = self.next_swamp() {
                         // Keep draining bucket until it's empty
                         (Swamp { saved }, Some(elem))
@@ -263,8 +234,6 @@ where
                 }
                 Empty => (Empty, None),
             };
-
-            log::info!("State {:?}, result? {}", state, result.is_some());
 
             self.state = state;
 
@@ -281,11 +250,14 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::kbucket::{Entry, InsertResult, Key};
+    use std::time::Duration;
+
     use libp2p_core::identity::ed25519;
     use libp2p_core::{identity, PeerId};
-    use std::time::Duration;
+
+    use crate::kbucket::{Entry, InsertResult, Key};
+
+    use super::*;
 
     #[test]
     fn correct_order() {
