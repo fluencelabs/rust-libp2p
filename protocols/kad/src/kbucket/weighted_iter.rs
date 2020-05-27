@@ -18,13 +18,13 @@ use crate::kbucket::{
     BucketIndex, ClosestBucketsIter, Distance, KBucketsTable, KeyBytes, Node, NodeStatus,
 };
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct Progress {
     need: usize,
     got: usize,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum State {
     Nowhere,
     Weighted(Progress),
@@ -75,8 +75,10 @@ where
 
     pub fn num_weighted(&self, idx: BucketIndex) -> usize {
         let distance = (self.start.get() as isize - idx.get() as isize).abs();
+        // After distance > 2, result will always be equal to 1
+        let pow = (distance + 2).min(4);
         // 16/2^(distance+2)
-        16 / 2usize.pow((distance + 2) as u32) // TODO: check overflows?
+        16 / 2usize.pow(pow as u32) // TODO: check overflows?
     }
 
     // Take iterator for next weighted bucket, save it to self.weighted_iter, and return
@@ -89,6 +91,12 @@ where
         if let Some(idx) = self.weighted_buckets.next() {
             let bucket = self.table.buckets.get(idx.get());
             let v = bucket.map(|b| self.sort_bucket(b.weighted().collect::<Vec<_>>()));
+            log::info!(
+                "next weighted bucket: {:?} exists? {} {}",
+                idx,
+                bucket.is_some(),
+                v.is_some()
+            );
             self.weighted_iter = v;
             // self.weighted_iter = bucket.map(|b| Box::new(b.weighted()) as _);
             self.weighted_iter.as_mut().map(|iter| (idx, iter))
@@ -116,6 +124,12 @@ where
         if let Some(idx) = self.swamp_buckets.next() {
             let bucket = self.table.buckets.get(idx.get());
             let v = bucket.map(|b| self.sort_bucket(b.swamp().collect::<Vec<_>>()));
+            log::info!(
+                "next swamp bucket: {:?} exists? {} {}",
+                idx,
+                bucket.is_some(),
+                v.is_some()
+            );
             self.swamp_iter = v;
             // self.swamp_iter = Some(Box::new(bucket.swamp()) as _);
             self.swamp_iter.as_mut()
@@ -126,7 +140,6 @@ where
 
     pub fn next_swamp(&mut self) -> Option<(&'a Node<TKey, TVal>, NodeStatus)> {
         // let mut iter = self.swamp_iter.as_mut().or(self.next_swamp_bucket())?;
-
         if let Some(iter) = self.swamp_iter.as_deref_mut() {
             iter.next()
         } else if let Some(iter) = self.next_swamp_bucket() {
@@ -166,10 +179,12 @@ where
                 // Not yet started, or just finished a bucket
                 // Here we decide where to go next
                 Nowhere => {
+                    log::info!("Here we decide where to go next");
                     // If there is a weighted bucket, try take element from it
                     if let Some((idx, iter)) = self.next_weighted_bucket() {
                         if let Some(elem) = iter.next() {
                             // Found weighted element
+                            log::info!("Found weighted element");
                             let state = Weighted(Progress {
                                 got: 1,
                                 need: self.num_weighted(idx),
@@ -177,47 +192,64 @@ where
                             (state, Some(elem))
                         } else {
                             // Weighted bucket was empty: go decide again
+                            log::info!("Weighted bucket was empty: go decide again");
                             (Nowhere, None)
                         }
                     } else {
                         // There are no weighted buckets, go to swamp
+                        log::info!("There are no weighted buckets, go to swamp");
                         (Swamp { saved: None }, None)
                     }
                 }
                 // Iterating through a weighted bucket, need more elements
                 Weighted(Progress { got, need }) if got < need => {
+                    log::info!("Iterating through a weighted bucket, need more elements");
                     if let Some(elem) = self.next_weighted() {
                         // Found weighted element, go take more
                         let state = Weighted(Progress { got: got + 1, need });
                         (state, Some(elem))
                     } else {
                         // Current bucket is empty, we're nowhere: need to decide where to go next
+                        log::info!("Current bucket is empty, we're nowhere: need to decide where to go next");
                         (Nowhere, None)
                     }
                 }
                 // Got enough weighted, go to swamp (saving progress, to return back with it)
-                Weighted(progress) => (
-                    Swamp {
-                        saved: Some(progress),
-                    },
-                    None,
-                ),
+                Weighted(Progress { need, .. }) => {
+                    log::info!("Got enough weighted, go to swamp");
+                    (
+                        Swamp {
+                            // Set 'got' to zero, so when we get element from swarm, we start afresh
+                            saved: Some(Progress { need, got: 0 }),
+                        },
+                        None,
+                    )
+                }
                 // Take one element from swamp, and go to Weighted
-                Swamp { saved: Some(saved) } => {
+                Swamp {
+                    saved: Some(mut saved),
+                } => {
+                    saved.got = 0;
+
+                    log::info!("Take one element from swamp, and go to Weighted");
                     if let Some(elem) = self.next_swamp() {
                         // We always take just a single element from the swamp
                         // And then go back to weighted
+                        log::info!("Got swamp element, go to weighted");
                         (Weighted(saved), Some(elem))
                     } else if self.next_swamp_bucket().is_some() {
                         // Current bucket was empty, take next one
+                        log::info!("Current swamp bucket was empty, take next one");
                         (Swamp { saved: Some(saved) }, None)
                     } else {
                         // No more swamp buckets, go drain weighted
+                        log::info!("No more swamp buckets, go drain weighted");
                         (Weighted(saved), None)
                     }
                 }
                 // Weighted buckets are empty
                 Swamp { saved } => {
+                    log::info!("Weighted buckets are empty");
                     if let Some(elem) = self.next_swamp() {
                         // Keep draining bucket until it's empty
                         (Swamp { saved }, Some(elem))
@@ -231,6 +263,8 @@ where
                 }
                 Empty => (Empty, None),
             };
+
+            log::info!("State {:?}, result? {}", state, result.is_some());
 
             self.state = state;
 
@@ -248,13 +282,61 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kbucket::{Entry, InsertResult, Key};
+    use libp2p_core::identity::ed25519;
+    use libp2p_core::{identity, PeerId};
+    use std::time::Duration;
 
     #[test]
     fn correct_order() {
-        // let keypair = ed25519::Keypair::generate();
-        // let public_key = identity::PublicKey::Ed25519(keypair.public());
-        // let local_key = Key::from(PeerId::from(public_key));
-        // let other_id = Key::from(PeerId::random());
-        // let other_weight = 0; // TODO: random weight
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Debug)
+            .try_init()
+            .ok();
+
+        let keypair = ed25519::Keypair::generate();
+        let public_key = identity::PublicKey::Ed25519(keypair.public());
+        let local_key = Key::from(PeerId::from(public_key));
+
+        let mut table =
+            KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_secs(5));
+
+        // Insert:
+        // 8 weighted
+        // 2 swamp
+        //
+        // Expect:
+        // 4 w, 1s, 4w, 1s
+
+        let mut insert = |weight: u32| {
+            let id = Key::from(PeerId::random());
+            if let Entry::Absent(e) = table.entry(&id) {
+                assert_eq!(
+                    e.insert((), NodeStatus::Connected, weight),
+                    InsertResult::Inserted
+                );
+                Some(id)
+            } else {
+                None
+            }
+        };
+
+        let weighted = (0..8)
+            .map(|_| insert(10).expect("inserted"))
+            .collect::<Vec<_>>();
+
+        let swamp = (0..2)
+            .map(|_| insert(0).expect("inserted"))
+            .collect::<Vec<_>>();
+
+        let closest = table.closest_keys(&local_key).collect::<Vec<_>>();
+
+        println!("weighted: {:?}", weighted);
+        println!("swamp: {:?}", swamp);
+        println!("closest: {:?}", closest);
+
+        for k in closest[0..4].iter().collect::<Vec<_>>() {
+            assert!(weighted.contains(k));
+        }
     }
 }
