@@ -78,12 +78,12 @@ pub use entry::*;
 pub use sub_bucket::*;
 
 use bucket::KBucket;
+use libp2p_core::identity::ed25519;
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
-use std::collections::{VecDeque};
+use log::debug;
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::time::Duration;
-use libp2p_core::identity::ed25519;
-use log::debug;
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
@@ -159,7 +159,7 @@ where
             local_kp,
             local_key,
             buckets: (0..NUM_BUCKETS)
-                .map(|idx| KBucket::new(pending_timeout, BucketIndex(idx)))
+                .map(|_| KBucket::new(pending_timeout))
                 .collect(),
             applied_pending: VecDeque::new(),
         }
@@ -179,7 +179,11 @@ where
     pub fn entry<'a>(&'a mut self, key: &'a TKey) -> Entry<'a, TKey, TVal> {
         let index = BucketIndex::new(&self.local_key.as_ref().distance(key));
         if let Some(i) = index {
-            debug!("Node {} belongs to bucket {}", bs58::encode(key.as_ref()).into_string(), i.get());
+            debug!(
+                "Node {} belongs to bucket {}",
+                bs58::encode(key.as_ref()).into_string(),
+                i.get()
+            );
             let bucket = &mut self.buckets[i.get()];
             self.applied_pending.extend(bucket.apply_pending());
             Entry::new(bucket, key)
@@ -309,8 +313,6 @@ where
         }
     }
 
-
-
     /// Counts the number of nodes between the local node and the node
     /// closest to `target`.
     ///
@@ -435,13 +437,16 @@ impl ClosestBucketsIter {
             arr[i] = u.bit(i) as u8;
         }
 
-        arr.iter().enumerate().map(|(i, u)| {
-            if i == highlight {
-                format!("-[{}]-", u)
-            } else {
-                u.to_string()
-            }
-        }).collect()
+        arr.iter()
+            .enumerate()
+            .map(|(i, u)| {
+                if i == highlight {
+                    format!("-[{}]-", u)
+                } else {
+                    u.to_string()
+                }
+            })
+            .collect()
     }
 }
 
@@ -473,9 +478,7 @@ impl Iterator for ClosestBucketsIter {
                     None
                 }
             }
-            ClosestBucketsIterState::Done => {
-                None
-            },
+            ClosestBucketsIterState::Done => None,
         }
     }
 }
@@ -500,8 +503,8 @@ where
                             bs58::encode(&self.target.as_ref()).into_string(),
                             bs58::encode(k.as_ref()).into_string()
                         );
-                        return Some(k)
-                    },
+                        return Some(k);
+                    }
                     None => self.iter = None,
                 },
                 None => {
@@ -512,13 +515,14 @@ where
                         v.sort_by(|a, b| {
                             Ord::cmp(
                                 &self.target.as_ref().distance(a.as_ref()),
-                                &self.target.as_ref().distance(b.as_ref())
+                                &self.target.as_ref().distance(b.as_ref()),
                             )
                         });
                         debug!(
                             "ClosestIter: target = {}; next bucket {} with {} nodes",
                             bs58::encode(&self.target.as_ref()).into_string(),
-                            i.0, v.len()
+                            i.0,
+                            v.len()
                         );
                         self.iter = Some(v.into_iter());
                     } else {
@@ -574,10 +578,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use libp2p_core::identity;
     use libp2p_core::PeerId;
     use quickcheck::*;
     use rand::Rng;
-    use libp2p_core::identity;
     use std::time::Instant;
 
     type TestTable = KBucketsTable<KeyBytes, ()>;
@@ -595,14 +599,18 @@ mod tests {
                 let ix = BucketIndex(i);
                 let num = g.gen_range(0, usize::min(K_VALUE.get(), num_total) + 1);
                 num_total -= num;
-                for _ in 0 .. num {
+                for _ in 0..num {
                     let distance = ix.rand_distance(g);
                     let key = local_key.for_distance(distance);
-                    let node = Node { key: key.clone(), value: (), weight: 0 }; // TODO: arbitrary weight
+                    let node = Node {
+                        key: key.clone(),
+                        value: (),
+                        weight: 0,
+                    }; // TODO: arbitrary weight
                     let status = NodeStatus::arbitrary(g);
                     match b.insert(node, status) {
                         InsertResult::Inserted => {}
-                        _ => panic!()
+                        _ => panic!(),
                     }
                 }
             }
@@ -636,7 +644,7 @@ mod tests {
         if let Entry::Absent(entry) = table.entry(&other_id) {
             match entry.insert((), NodeStatus::Connected, other_weight) {
                 InsertResult::Inserted => (),
-                _ => panic!()
+                _ => panic!(),
             }
         } else {
             panic!()
@@ -652,7 +660,8 @@ mod tests {
         let keypair = ed25519::Keypair::generate();
         let public_key = identity::PublicKey::Ed25519(keypair.public());
         let local_key = Key::from(PeerId::from(public_key));
-        let mut table = KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_secs(5));
+        let mut table =
+            KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_secs(5));
         match table.entry(&local_key) {
             Entry::SelfEntry => (),
             _ => panic!(),
@@ -667,10 +676,13 @@ mod tests {
         let mut table = KBucketsTable::<_, ()>::new(keypair, local_key, Duration::from_secs(5));
         let mut count = 0;
         loop {
-            if count == 100 { break; }
+            if count == 100 {
+                break;
+            }
             let key = Key::from(PeerId::random());
             if let Entry::Absent(e) = table.entry(&key) {
-                match e.insert((), NodeStatus::Connected, 0) { // TODO: random weight
+                match e.insert((), NodeStatus::Connected, 0) {
+                    // TODO: random weight
                     InsertResult::Inserted => count += 1,
                     _ => continue,
                 }
@@ -679,12 +691,13 @@ mod tests {
             }
         }
 
-        let mut expected_keys: Vec<_> = table.buckets
+        let mut expected_keys: Vec<_> = table
+            .buckets
             .iter()
-            .flat_map(|t| t.iter().map(|(n,_)| n.key.clone()))
+            .flat_map(|t| t.iter().map(|(n, _)| n.key.clone()))
             .collect();
 
-        for _ in 0 .. 10 {
+        for _ in 0..10 {
             let target_key = Key::from(PeerId::random());
             let keys = table.closest_keys(&target_key).collect::<Vec<_>>();
             // The list of keys is expected to match the result of a full-table scan.
@@ -698,33 +711,48 @@ mod tests {
         let keypair = ed25519::Keypair::generate();
         let public_key = identity::PublicKey::Ed25519(keypair.public());
         let local_key = Key::from(PeerId::from(public_key));
-        let mut table = KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_millis(1));
+        let mut table =
+            KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_millis(1));
 
         let expected_applied;
         let full_bucket_index;
         loop {
             let key = Key::from(PeerId::random()); // generate random peer_id
-            if let Entry::Absent(e) = table.entry(&key) { // check it's not yet in any bucket
+            if let Entry::Absent(e) = table.entry(&key) {
+                // check it's not yet in any bucket
                 // TODO: random weight
-                match e.insert((), NodeStatus::Disconnected, 0) { // insert it into some bucket (node Disconnected status)
-                    InsertResult::Full => { // keep inserting until some random bucket is full (see continue below)
-                        if let Entry::Absent(e) = table.entry(&key) { // insertion didn't succeeded => no such key in a table
+                match e.insert((), NodeStatus::Disconnected, 0) {
+                    // insert it into some bucket (node Disconnected status)
+                    InsertResult::Full => {
+                        // keep inserting until some random bucket is full (see continue below)
+                        if let Entry::Absent(e) = table.entry(&key) {
+                            // insertion didn't succeeded => no such key in a table
                             // TODO: random weight
-                            match e.insert((), NodeStatus::Connected, 0) { // insert it but now with Connected status
-                                InsertResult::Pending { disconnected } => { // insertion of a connected node into full bucket should produce Pending
+                            match e.insert((), NodeStatus::Connected, 0) {
+                                // insert it but now with Connected status
+                                InsertResult::Pending { disconnected } => {
+                                    // insertion of a connected node into full bucket should produce Pending
                                     expected_applied = AppliedPending {
-                                        inserted: Node { key: key.clone(), value: (), weight: 0 }, // TODO: random weight
-                                        evicted: Some(Node { key: disconnected, value: (), weight: 0 }) // TODO: random weight
+                                        inserted: Node {
+                                            key: key.clone(),
+                                            value: (),
+                                            weight: 0,
+                                        }, // TODO: random weight
+                                        evicted: Some(Node {
+                                            key: disconnected,
+                                            value: (),
+                                            weight: 0,
+                                        }), // TODO: random weight
                                     };
                                     full_bucket_index = BucketIndex::new(&key.distance(&local_key));
-                                    break
-                                },
-                                _ => panic!()
+                                    break;
+                                }
+                                _ => panic!(),
                             }
                         } else {
                             panic!()
                         }
-                    },
+                    }
                     _ => continue,
                 }
             } else {
@@ -735,17 +763,20 @@ mod tests {
         // Expire the timeout for the pending entry on the full bucket.`
         let full_bucket = &mut table.buckets[full_bucket_index.unwrap().get()];
         let elapsed = Instant::now() - Duration::from_secs(1);
-        full_bucket.pending_mut(&expected_applied.inserted.key).unwrap().set_ready_at(elapsed);
+        full_bucket
+            .pending_mut(&expected_applied.inserted.key)
+            .unwrap()
+            .set_ready_at(elapsed);
 
         // Calling table.entry() has a side-effect of applying pending nodes
         match table.entry(&expected_applied.inserted.key) {
             Entry::Present(_, NodeStatus::Connected) => {}
-            x => panic!("Unexpected entry: {:?}", x)
+            x => panic!("Unexpected entry: {:?}", x),
         }
 
         match table.entry(&expected_applied.evicted.as_ref().unwrap().key) {
             Entry::Absent(_) => {}
-            x => panic!("Unexpected entry: {:?}", x)
+            x => panic!("Unexpected entry: {:?}", x),
         }
 
         assert_eq!(Some(expected_applied), table.take_applied_pending());
@@ -773,6 +804,8 @@ mod tests {
             })
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_,_) -> _)
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop as fn(_, _) -> _)
     }
 }
