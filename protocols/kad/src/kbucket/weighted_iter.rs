@@ -202,9 +202,7 @@ where
                     )
                 }
                 // Take one element from swamp, and go to Weighted
-                Swamp {
-                    saved: Some(mut saved),
-                } => {
+                Swamp { saved: Some(saved) } => {
                     if let Some(elem) = self.next_swamp() {
                         // We always take just a single element from the swamp
                         // And then go back to weighted
