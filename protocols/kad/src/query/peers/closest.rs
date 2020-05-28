@@ -151,7 +151,7 @@ impl ClosestPeersIter {
     /// calling this function has no effect and `false` is returned.
     pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
     where
-        I: IntoIterator<Item = PeerId>
+        I: IntoIterator<Item = Key<PeerId>>
     {
         if let State::Finished = self.state {
             return false
@@ -188,8 +188,7 @@ impl ClosestPeersIter {
         let mut progress = false;
 
         // Incorporate the reported closer peers into the iterator.
-        for peer in closer_peers {
-            let key = peer.into();
+        for key in closer_peers {
             let distance = self.target.distance(&key);
             let peer = Peer { key, state: PeerState::NotContacted, log: vec![(Instant::now(), PeerState::NotContacted)] };
             self.closest_peers.entry(distance).or_insert(peer);
