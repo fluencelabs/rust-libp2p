@@ -660,8 +660,11 @@ mod tests {
                 for (i, k) in expected.iter().enumerate() {
                     if rng.gen_bool(0.75) {
                         let num_closer = rng.gen_range(0, iter.config.num_results + 1);
-                        let closer_peers = random_peers(num_closer, &mut rng);
-                        remaining.extend(closer_peers.iter().cloned().map(Key::from));
+                        let closer_peers = random_peers(num_closer, &mut rng)
+                            .into_iter()
+                            .map(|p| p.into())
+                            .collect::<Vec<_>>();
+                        remaining.extend(closer_peers.clone());
                         iter.on_success(k.preimage(), closer_peers);
                     } else {
                         num_failures += 1;
@@ -717,7 +720,10 @@ mod tests {
             let now = Instant::now();
             let mut rng = StdRng::from_seed(seed.0);
 
-            let closer = random_peers(1, &mut rng);
+            let closer = random_peers(1, &mut rng)
+                .into_iter()
+                .map(|p| p.into())
+                .collect::<Vec<_>>();
 
             // A first peer reports a "closer" peer.
             let peer1 = match iter.next(now) {
@@ -739,7 +745,7 @@ mod tests {
             };
 
             // The "closer" peer must only be in the iterator once.
-            let n = iter.closest_peers.values().filter(|e| e.key.preimage() == &closer[0]).count();
+            let n = iter.closest_peers.values().filter(|e| e.key == closer[0]).count();
             assert_eq!(n, 1);
 
             true
