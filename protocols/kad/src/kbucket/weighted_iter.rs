@@ -89,12 +89,6 @@ where
         let idx = self.weighted_buckets.next()?;
         let bucket = self.table.buckets.get(idx.get());
         let v = bucket.map(|b| self.sort_bucket(b.weighted().collect::<Vec<_>>()));
-        log::info!(
-            "next weighted bucket: {:?} exists? {} {}",
-            idx,
-            bucket.is_some(),
-            v.is_some()
-        );
         self.weighted_iter = v;
         // self.weighted_iter = bucket.map(|b| Box::new(b.weighted()) as _);
         self.weighted_iter.as_mut().map(|iter| (idx, iter))
@@ -112,26 +106,14 @@ where
     }
 
     pub fn next_swamp_bucket(&mut self) -> Option<&'_ mut DynIter<'a, TKey, TVal>> {
-        if let Some(idx) = self.swamp_buckets.next() {
-            let bucket = self.table.buckets.get(idx.get());
-            let v = bucket.map(|b| self.sort_bucket(b.swamp().collect::<Vec<_>>()));
-            log::info!(
-                "next swamp bucket: {:?} exists? {} {}",
-                idx,
-                bucket.is_some(),
-                v.is_some()
-            );
-            self.swamp_iter = v;
-            // self.swamp_iter = Some(Box::new(bucket.swamp()) as _);
-            self.swamp_iter.as_mut()
-        } else {
-            None
-        }
+        let idx = self.swamp_buckets.next()?;
+        let bucket = self.table.buckets.get(idx.get());
+        let v = bucket.map(|b| self.sort_bucket(b.swamp().collect::<Vec<_>>()));
+        self.swamp_iter = v;
+        self.swamp_iter.as_mut()
     }
 
     pub fn next_swamp(&mut self) -> Option<Entry<'a, TKey, TVal>> {
-        // let iter = self.swamp_iter.as_mut().or(self.next_swamp_bucket())?;
-
         if let Some(iter) = self.swamp_iter.as_deref_mut() {
             return iter.next();
         }
@@ -246,7 +228,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use libp2p_core::identity::ed25519;
     use libp2p_core::{identity, PeerId};
@@ -256,7 +238,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn correct_order() {
+    /// Insert:
+    /// 1 weighted far away
+    /// lots of swamp near
+    ///
+    /// Expect:
+    /// weighted still in the results
+    fn weighted_first() {
         env_logger::builder()
             .filter_level(log::LevelFilter::Debug)
             .try_init()
@@ -269,42 +257,48 @@ mod tests {
         let mut table =
             KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_secs(5));
 
-        // Insert:
-        // 8 weighted
-        // 2 swamp
-        //
-        // Expect:
-        // 4 w, 1s, 4w, 1s
-
-        let mut insert = |weight: u32| {
-            let id = Key::from(PeerId::random());
+        let mut insert = |id: Key<PeerId>, weight: u32| {
             if let Entry::Absent(e) = table.entry(&id) {
-                assert_eq!(
-                    e.insert((), NodeStatus::Connected, weight),
-                    InsertResult::Inserted
-                );
-                Some(id)
-            } else {
-                None
+                if let InsertResult::Inserted = e.insert((), NodeStatus::Connected, weight) {
+                    return Some(id);
+                }
+            }
+            None
+        };
+
+        let target_min_distance = 250;
+        let target = loop {
+            let id = Key::from(PeerId::random());
+            let distance = local_key.distance(&id);
+            let idx = BucketIndex::new(&distance).unwrap_or(BucketIndex(0)).get();
+            if idx > target_min_distance {
+                let target = insert(id, 10).expect("inserted");
+                break target;
             }
         };
 
-        let weighted = (0..8)
-            .map(|_| insert(10).expect("inserted"))
-            .collect::<Vec<_>>();
-
-        let swamp = (0..2)
-            .map(|_| insert(0).expect("inserted"))
-            .collect::<Vec<_>>();
-
-        let closest = table.closest_keys(&local_key).collect::<Vec<_>>();
-
-        println!("weighted: {:?}", weighted);
-        println!("swamp: {:?}", swamp);
-        println!("closest: {:?}", closest);
-
-        for k in closest[0..4].iter().collect::<Vec<_>>() {
-            assert!(weighted.contains(k));
+        let mut swamp = 100;
+        let max_distance = 252;
+        while swamp > 0 {
+            let id = Key::from(PeerId::random());
+            let distance = local_key.distance(&id);
+            let idx = BucketIndex::new(&distance).unwrap_or(BucketIndex(0)).get();
+            if idx < max_distance && insert(id, 0).is_some() {
+                swamp -= 1;
+            }
         }
+
+        // Start from bucket 0
+        let closest = table.closest_keys(&local_key).take(1).collect::<Vec<_>>();
+        assert!(closest.contains(&target));
+
+        // Start from target
+        let closest = table.closest_keys(&target).take(1).collect::<Vec<_>>();
+        assert!(closest.contains(&target));
+
+        // Start from random
+        let random = Key::from(PeerId::random());
+        let closest = table.closest_keys(&random).take(1).collect::<Vec<_>>();
+        assert!(closest.contains(&target));
     }
 }
