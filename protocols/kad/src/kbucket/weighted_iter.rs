@@ -228,7 +228,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use libp2p_core::identity::ed25519;
     use libp2p_core::{identity, PeerId};

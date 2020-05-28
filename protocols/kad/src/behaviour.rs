@@ -628,7 +628,7 @@ where
         I: Iterator<Item = &'a KadPeer> + Clone
     {
         let local_id = self.kbuckets.local_key().preimage().clone();
-        let others_iter = peers.filter(|p| p.node_id != local_id);
+        let mut others_iter = peers.filter(|p| p.node_id != local_id);
 
         for peer in others_iter.clone() {
             self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -643,12 +643,12 @@ where
 
         if let Some(query) = self.queries.get_mut(query_id) {
             log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
-            for peer in others_iter.clone() {
+            for peer in others_iter.by_ref() {
                 log::trace!("Peer {:?} reported by {:?} in query {:?}.",
                             peer, source, query_id);
                 query.inner.contacts.insert(peer.node_id.clone(), peer.clone().into());
             }
-            query.on_success(source, others_iter.cloned().map(|kp| kp.node_id))
+            query.on_success(source, others_iter.map(|kp| kp.node_id.clone()))
         }
     }
 
@@ -2281,9 +2281,9 @@ impl QueryInfo {
                     ..
                 } => {
                     KademliaHandlerIn::AddProvider {
-                key: key.clone(),
-                provider: crate::protocol::KadPeer {
-                    public_key: provider_key.clone(),
+                        key: key.clone(),
+                        provider: crate::protocol::KadPeer {
+                            public_key: provider_key.clone(),
                             node_id: provider_id.clone(),
                             multiaddrs: external_addresses.clone(),
                             connection_ty: crate::protocol::KadConnectionType::Connected,
