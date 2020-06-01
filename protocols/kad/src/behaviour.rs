@@ -641,7 +641,7 @@ where
         }
 
         let local_id = self.kbuckets.local_key().preimage().clone();
-        let mut others_iter = peers.filter(|p| p.node_id != local_id);
+        let others_iter = peers.filter(|p| p.node_id != local_id);
 
         for peer in others_iter.clone() {
             self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
