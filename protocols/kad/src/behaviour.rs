@@ -658,7 +658,7 @@ where
 
         if let Some(query) = self.queries.get_mut(query_id) {
             log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
-            for peer in others_iter.by_ref() {
+            for peer in others_iter.clone() {
                 log::trace!("Peer {:?} reported by {:?} in query {:?}.",
                             peer, source, query_id);
                 query.inner.contacts.insert(peer.node_id.clone(), peer.clone().into());
