@@ -294,8 +294,6 @@ impl<TInner> Query<TInner> {
             QueryPeerIter::Fixed(iter) => iter.on_failure(peer),
         };
 
-        debug_assert_ne!(updated_weighted, updated_swamp);
-
         if updated_swamp || updated_weighted {
             self.stats.failure += 1;
         }
