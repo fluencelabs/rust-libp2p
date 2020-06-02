@@ -473,6 +473,7 @@ where
             self.record_ttl.map(|ttl| Instant::now() + ttl));
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let target = kbucket::Key::new(record.key.clone());
+
         let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let context = PutRecordContext::Publish;
         let info = QueryInfo::PutRecord {

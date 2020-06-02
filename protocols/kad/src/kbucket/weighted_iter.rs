@@ -267,6 +267,7 @@ mod tests {
         };
 
         let target_min_distance = 250;
+        // Generate weighted target
         let target = loop {
             let id = Key::from(PeerId::random());
             let distance = local_key.distance(&id);

@@ -99,13 +99,6 @@ pub struct KadPeer {
     pub certificates: Vec<Certificate>,
 }
 
-impl KadPeer {
-    pub fn fill_certificates(mut self, trust: &TrustGraph) -> Self {
-        self.certificates = trust.get_all_certs(&self.public_key, &[]);
-        self
-    }
-}
-
 // Builds a `KadPeer` from a corresponding protobuf message.
 impl TryFrom<proto::message::Peer> for KadPeer {
     type Error = io::Error;
