@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-use prometheus::{IntCounterVec, Registry, Opts, Counter, Gauge, IntGauge};
+use prometheus::{Counter, Gauge, IntCounterVec, IntGauge, Opts, Registry};
 
-pub struct Metrics {
+struct InnerMetrics {
     sent_requests: IntCounterVec,
     received_responses: IntCounterVec,
     received_requests: IntCounterVec,
@@ -25,12 +25,23 @@ pub struct Metrics {
     records_stored: IntGauge,
 }
 
-impl Metrics {
-    pub fn new(registry: &Registry) -> Self {
-        let default = Opts::new("", "").namespace("libp2p").subsystem("kad");
+enum Inner {
+    Enabled(InnerMetrics),
+    Disabled,
+}
 
+pub struct Metrics {
+    inner: Inner
+}
+
+impl Metrics {
+    pub fn disabled() -> Self {
+        Self { inner: Inner::Disabled }
+    }
+
+    pub fn enabled(registry: &Registry) -> Self {
         let opts = |name: &str| -> Opts {
-            let mut opts = default.clone();
+            let mut opts = Opts::new(name, name).namespace("libp2p").subsystem("kad");
             opts.name = name.into();
             opts.help = name.into(); // TODO: better help?
             opts
@@ -40,7 +51,7 @@ impl Metrics {
         let counter = |name: &str, label_names: &[&str]| -> IntCounterVec {
             let counter = IntCounterVec::new(
                 opts(name),
-                label_names
+                label_names,
             ).expect(format!("create {}", name).as_str());
 
             registry.register(Box::new(counter.clone())).expect(format!("register {}", name).as_str());
@@ -60,12 +71,14 @@ impl Metrics {
         registry.register(Box::new(records_stored.clone())).expect("register records_stored");
 
         Self {
-            sent_requests,
-            received_responses,
-            received_requests,
-            sent_responses,
-            errors,
-            records_stored
+            inner: Inner::Enabled(InnerMetrics {
+                sent_requests,
+                received_responses,
+                received_requests,
+                sent_responses,
+                errors,
+                records_stored,
+            })
         }
     }
 }
