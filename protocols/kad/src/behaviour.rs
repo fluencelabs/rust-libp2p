@@ -1528,6 +1528,8 @@ where
                     return None;
                 }
 
+                size += elems.len(); // TODO: how does this affect performance?
+
                 let header = format!("Bucket {:?}, elements: {}", index.get(), elems.len());
                 let elems = elems
                     .into_iter()
@@ -1576,7 +1578,6 @@ where
                     })
                     .collect::<String>();
 
-                size += elems.len(); // TODO: how does this affect performance?
                 Some(format!("[bcktdbg] {}\n{}\n", header, elems))
             })
             .collect::<String>();
