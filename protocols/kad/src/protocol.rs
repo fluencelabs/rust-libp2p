@@ -42,7 +42,7 @@ use wasm_timer::Instant;
 
 use derivative::Derivative;
 use libp2p_core::identity::ed25519::PublicKey;
-use trust_graph::{Certificate, Trust, TrustGraph};
+use trust_graph::{Certificate, Trust};
 
 /// The protocol name used for negotiating with multistream-select.
 pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";
