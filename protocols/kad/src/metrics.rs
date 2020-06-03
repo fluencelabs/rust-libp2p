@@ -19,8 +19,8 @@ use prometheus::{IntCounterVec, IntGauge, Opts, Registry};
 use libp2p_core::PeerId;
 use libp2p_swarm::NetworkBehaviourAction;
 
-use crate::{KademliaEvent, QueryId};
 use crate::handler::{KademliaHandlerEvent, KademliaHandlerIn};
+use crate::{KademliaEvent, QueryId};
 
 pub enum Kind {
     Request,
@@ -52,18 +52,23 @@ enum Inner {
 }
 
 pub struct Metrics {
-    inner: Inner
+    inner: Inner,
 }
 
 impl Metrics {
     pub fn disabled() -> Self {
-        Self { inner: Inner::Disabled }
+        Self {
+            inner: Inner::Disabled,
+        }
     }
 
     pub fn enabled(registry: &Registry, peer_id: &PeerId) -> Self {
         let peer_id = bs58::encode(peer_id).into_string();
         let opts = |name: &str| -> Opts {
-            let mut opts = Opts::new(name, name).namespace("libp2p").subsystem("kad").const_label("peer_id", peer_id.as_str());
+            let mut opts = Opts::new(name, name)
+                .namespace("libp2p")
+                .subsystem("kad")
+                .const_label("peer_id", peer_id.as_str());
             opts.name = name.into();
             opts.help = name.into(); // TODO: better help?
             opts
@@ -71,18 +76,20 @@ impl Metrics {
 
         // Creates and registers counter in registry
         let counter = |name: &str, label_names: &[&str]| -> IntCounterVec {
-            let counter = IntCounterVec::new(
-                opts(name),
-                label_names,
-            ).expect(format!("create {}", name).as_str());
+            let counter = IntCounterVec::new(opts(name), label_names)
+                .expect(format!("create {}", name).as_str());
 
-            registry.register(Box::new(counter.clone())).expect(format!("register {}", name).as_str());
+            registry
+                .register(Box::new(counter.clone()))
+                .expect(format!("register {}", name).as_str());
             counter
         };
 
         let gauge = |name: &str| -> IntGauge {
             let gauge = IntGauge::with_opts(opts(name)).expect(format!("create {}", name).as_str());
-            registry.register(Box::new(gauge.clone())).expect(format!("register {}", name).as_str());
+            registry
+                .register(Box::new(gauge.clone()))
+                .expect(format!("register {}", name).as_str());
             gauge
         };
 
@@ -113,11 +120,14 @@ impl Metrics {
                 connected_nodes,
                 kademlia_events,
                 routing_table_size,
-            })
+            }),
         }
     }
 
-    fn with_metrics<F>(&self, f: F) where F: FnOnce(&InnerMetrics) {
+    fn with_metrics<F>(&self, f: F)
+    where
+        F: FnOnce(&InnerMetrics),
+    {
         if let Inner::Enabled(metrics) = &self.inner {
             f(metrics)
         }
@@ -159,7 +169,7 @@ impl Metrics {
             let counter = match &kind {
                 Request => &m.sent_requests,
                 Response => &m.sent_responses,
-                Error => &m.errors
+                Error => &m.errors,
             };
 
             Self::inc_by_name(name, counter);
@@ -191,7 +201,7 @@ impl Metrics {
             let counter = match &kind {
                 Request => &m.received_requests,
                 Response => &m.received_responses,
-                Error => &m.errors
+                Error => &m.errors,
             };
 
             Self::inc_by_name(name, counter);
@@ -207,7 +217,10 @@ impl Metrics {
         }
     }
 
-    pub fn polled_event(&self, event: &NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>) {
+    pub fn polled_event(
+        &self,
+        event: &NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>,
+    ) {
         let name = match event {
             NetworkBehaviourAction::DialAddress { .. } => "dial_address",
             NetworkBehaviourAction::DialPeer { .. } => "dial_peer",
