@@ -669,6 +669,12 @@ where
         self.queries.add_iter_closest(target.clone(), peers, inner)
     }
 
+    pub fn replicate_record(&mut self, key: &record::Key) {
+        if let Some(rec) = self.store.get(key).map(|r| r.into_owned()) {
+            self.start_put_record(rec, Quorum::All, PutRecordContext::Replicate)
+        }
+    }
+
     /// Processes discovered peers from a successful request in an iterative `Query`.
     fn discovered<'a, I>(&'a mut self, query_id: &QueryId, source: &PeerId, peers: I)
     where
