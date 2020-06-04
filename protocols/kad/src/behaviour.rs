@@ -458,7 +458,7 @@ where
         if let Some(record) = self.store.get(key) {
             if record.is_expired(Instant::now()) {
                 self.store.remove(key);
-                self.metrics.store_remove();
+                self.metrics.record_removed();
             } else {
                 records.push(record.into_owned());
             }
@@ -540,7 +540,7 @@ where
         if let Some(r) = self.store.get(key) {
             if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
                 self.store.remove(key);
-                self.metrics.store_remove();
+                self.metrics.record_removed();
             }
         }
     }
@@ -1845,7 +1845,7 @@ where
                     Some(record) => {
                         if record.is_expired(Instant::now()) {
                             self.store.remove(&key);
-                            self.metrics.store_remove();
+                            self.metrics.record_removed();
                             None
                         } else {
                             Some(record.into_owned())

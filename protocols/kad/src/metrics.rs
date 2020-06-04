@@ -239,7 +239,7 @@ impl Metrics {
         self.with_metrics(|m| m.records_stored.inc())
     }
 
-    pub fn store_remove(&self) {
+    pub fn record_removed(&self) {
         self.with_metrics(|m| m.records_stored.dec())
     }
 
