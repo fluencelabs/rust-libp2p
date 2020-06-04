@@ -163,7 +163,7 @@ impl ClosestPeersIter {
         // Mark the peer as succeeded.
         match self.closest_peers.entry(distance) {
             Entry::Vacant(..) => {
-                log::warn!("peer {} not found in closest_peers, ignoring result", peer);
+                log::debug!("peer {} not found in closest_peers, ignoring result", peer);
                 return false
             },
             Entry::Occupied(mut e) => match e.get().state {
@@ -178,7 +178,7 @@ impl ClosestPeersIter {
                 PeerState::NotContacted
                     | PeerState::Failed
                     | PeerState::Succeeded => {
-                    log::warn!("peer {} is incorrect state {:?}, ignoring result", peer, e.get().state);
+                    log::debug!("peer {} is incorrect state {:?}, ignoring result", peer, e.get().state);
                     return false
                 }
             }
