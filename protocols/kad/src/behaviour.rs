@@ -646,7 +646,7 @@ where
             self.start_put_record(rec, Quorum::All, PutRecordContext::Replicate);
             if let Some(job) = self.put_record_job.as_mut() {
                 // Skip replication for this key next time
-                j.skip(key)
+                job.skip(key)
             }
         }
     }
