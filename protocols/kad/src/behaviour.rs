@@ -107,6 +107,10 @@ pub struct Kademlia<TStore> {
 
     pub trust: TrustGraph,
     pub metrics: Metrics,
+
+    // TODO: maintenance job (periodic bootstrap) (first time: after a minute or less)
+    // TODO: "small" bootstrap function: lookup yourself
+    // TODO: how substrate uses bootstrap? is there a periodic maintenance job?
 }
 
 /// The configuration for the `Kademlia` behaviour.
