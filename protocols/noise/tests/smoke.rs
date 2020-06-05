@@ -101,6 +101,7 @@ fn xx() {
 }
 
 #[test]
+#[ignore]
 fn ix() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
@@ -132,6 +133,7 @@ fn ix() {
 }
 
 #[test]
+#[ignore]
 fn ik_xx() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
