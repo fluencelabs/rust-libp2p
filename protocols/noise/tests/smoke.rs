@@ -39,6 +39,7 @@ fn core_upgrade_compat() {
 }
 
 #[test]
+#[ignore]
 fn xx_spec() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
@@ -70,6 +71,7 @@ fn xx_spec() {
 }
 
 #[test]
+#[ignore]
 fn xx() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
