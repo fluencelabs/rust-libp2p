@@ -117,8 +117,7 @@ impl ClosestPeersIter {
                     let log = vec![(Instant::now(), state.clone())];
                     (distance, Peer { key, state, log })
                 })
-                .take(K_VALUE.into())
-        );
+                .take(K_VALUE.into()));
 
         // The iterator initially makes progress by iterating towards the target.
         let state = State::Iterating { no_progress : 0 };
