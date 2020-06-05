@@ -24,9 +24,6 @@ use libp2p_core::upgrade::{self, Negotiated, apply_inbound, apply_outbound};
 use libp2p_core::transport::{Transport, ListenerEvent};
 use libp2p_noise::{Keypair, X25519, X25519Spec, NoiseConfig, RemoteIdentity, NoiseError, NoiseOutput};
 use libp2p_tcp::{TcpConfig, TcpTransStream};
-use log::info;
-use quickcheck::QuickCheck;
-use std::{convert::TryInto, io};
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
@@ -39,7 +36,6 @@ fn core_upgrade_compat() {
 }
 
 #[test]
-#[ignore]
 fn xx_spec() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
@@ -71,7 +67,6 @@ fn xx_spec() {
 }
 
 #[test]
-#[ignore]
 fn xx() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
@@ -103,7 +98,6 @@ fn xx() {
 }
 
 #[test]
-#[ignore]
 fn ix() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
@@ -135,7 +129,6 @@ fn ix() {
 }
 
 #[test]
-#[ignore]
 fn ik_xx() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
