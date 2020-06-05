@@ -24,6 +24,9 @@ use libp2p_core::upgrade::{self, Negotiated, apply_inbound, apply_outbound};
 use libp2p_core::transport::{Transport, ListenerEvent};
 use libp2p_noise::{Keypair, X25519, X25519Spec, NoiseConfig, RemoteIdentity, NoiseError, NoiseOutput};
 use libp2p_tcp::{TcpConfig, TcpTransStream};
+use log::info;
+use quickcheck::QuickCheck;
+use std::{convert::TryInto, io};
 
 #[allow(dead_code)]
 fn core_upgrade_compat() {
