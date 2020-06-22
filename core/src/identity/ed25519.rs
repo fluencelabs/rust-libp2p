@@ -146,7 +146,7 @@ impl<'de> serde::Deserialize<'de> for PublicKey {
             {
                 bs58::decode(s)
                     .into_vec()
-                    .map_err(|err| Error::invalid_value(Unexpected::Str(s), &self))
+                    .map_err(|_| Error::invalid_value(Unexpected::Str(s), &self))
                     .and_then(|v| self.visit_bytes(v.as_slice()))
             }
 
@@ -155,7 +155,7 @@ impl<'de> serde::Deserialize<'de> for PublicKey {
                     E: Error,
             {
                 PublicKey::decode(b)
-                    .map_err(|err| Error::invalid_value(Unexpected::Bytes(b), &self))
+                    .map_err(|_| Error::invalid_value(Unexpected::Bytes(b), &self))
             }
         }
 
