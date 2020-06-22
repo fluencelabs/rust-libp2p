@@ -84,6 +84,13 @@ impl Clone for Keypair {
     }
 }
 
+/// Build keypair from existing ed25519 keypair
+impl From<ed25519::Keypair> for Keypair {
+    fn from(kp: ed25519::Keypair) -> Self {
+        Keypair(kp)
+    }
+}
+
 /// Demote an Ed25519 keypair to a secret key.
 impl From<Keypair> for SecretKey {
     fn from(kp: Keypair) -> SecretKey {
