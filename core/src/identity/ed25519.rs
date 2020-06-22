@@ -136,7 +136,7 @@ impl<'de> serde::Deserialize<'de> for PublicKey {
         where
             D: serde::Deserializer<'de>,
     {
-        use serde::de::{Error, Unexpected, Visitor};
+        use serde::de::{Error, Visitor};
 
         struct PKVisitor;
 
@@ -153,8 +153,9 @@ impl<'de> serde::Deserialize<'de> for PublicKey {
             {
                 bs58::decode(s)
                     .into_vec()
-                    .map_err(|_| Error::invalid_value(Unexpected::Str(s), &self))
+                    .map_err(|err| Error::custom(format!("Invalid string: {}", err)))
                     .and_then(|v| self.visit_bytes(v.as_slice()))
+                    .map_err(|err: E| Error::custom(format!("Parsed string as base58, but {}", err)))
             }
 
             fn visit_bytes<E>(self, b: &[u8]) -> Result<Self::Value, E>
@@ -162,7 +163,7 @@ impl<'de> serde::Deserialize<'de> for PublicKey {
                     E: Error,
             {
                 PublicKey::decode(b)
-                    .map_err(|_| Error::invalid_value(Unexpected::Bytes(b), &self))
+                    .map_err(|err| Error::custom(format!("Invalid bytes: {}", err)))
             }
         }
 
