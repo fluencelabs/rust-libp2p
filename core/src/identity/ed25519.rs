@@ -137,7 +137,7 @@ impl<'de> serde::Deserialize<'de> for PublicKey {
             type Value = PublicKey;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a string representing an URL")
+                formatter.write_str("byte array or base58 string")
             }
 
             fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
