@@ -124,6 +124,45 @@ impl PublicKey {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for PublicKey {
+    fn deserialize<D>(deserializer: D) -> Result<PublicKey, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+    {
+        use serde::de::{Error, Unexpected, Visitor};
+
+        struct PKVisitor;
+
+        impl<'de> Visitor<'de> for PKVisitor {
+            type Value = PublicKey;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string representing an URL")
+            }
+
+            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+                where
+                    E: Error,
+            {
+                bs58::decode(s)
+                    .into_vec()
+                    .map_err(|err| Error::invalid_value(Unexpected::Str(s), &self))
+                    .and_then(|v| self.visit_bytes(v.as_slice()))
+            }
+
+            fn visit_bytes<E>(self, b: &[u8]) -> Result<Self::Value, E>
+                where
+                    E: Error,
+            {
+                PublicKey::decode(b)
+                    .map_err(|err| Error::invalid_value(Unexpected::Bytes(b), &self))
+            }
+        }
+
+        deserializer.deserialize_str(PKVisitor)
+    }
+}
+
 /// An Ed25519 secret key.
 pub struct SecretKey(ed25519::SecretKey);
 
