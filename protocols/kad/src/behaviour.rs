@@ -495,7 +495,7 @@ where
     /// If the given peer or address is not in the routing table,
     /// this is a no-op.
     pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr)
-        -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>>
+        -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Contact>>
     {
         let key = kbucket::Key::new(peer.clone());
         match self.kbuckets.entry(&key) {
@@ -524,7 +524,7 @@ where
     /// Returns `None` if the peer was not in the routing table,
     /// not even pending insertion.
     pub fn remove_peer(&mut self, peer: &PeerId)
-        -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>>
+        -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Contact>>
     {
         let key = kbucket::Key::new(peer.clone());
         match self.kbuckets.entry(&key) {
@@ -542,7 +542,7 @@ where
 
     /// Returns an iterator over all non-empty buckets in the routing table.
     pub fn kbuckets(&mut self)
-        -> impl Iterator<Item = kbucket::KBucketRef<kbucket::Key<PeerId>, Addresses>>
+        -> impl Iterator<Item = kbucket::KBucketRef<kbucket::Key<PeerId>, Contact>>
     {
         self.kbuckets.iter().filter(|b| !b.is_empty())
     }
@@ -551,7 +551,7 @@ where
     ///
     /// Returns `None` if the given key refers to the local key.
     pub fn kbucket<K>(&mut self, key: K)
-        -> Option<kbucket::KBucketRef<kbucket::Key<PeerId>, Addresses>>
+        -> Option<kbucket::KBucketRef<kbucket::Key<PeerId>, Contact>>
     where
         K: Borrow<[u8]> + Clone
     {

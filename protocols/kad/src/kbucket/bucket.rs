@@ -133,7 +133,7 @@ where
     }
 
     pub fn has_pending(&self) -> bool {
-        self.pending_active(true) || self.pending_active(false)
+        self.weighted.pending_active() || self.swamp.pending_active()
     }
 
     /// Returns a reference to the pending node of the bucket, if there is any.
@@ -209,7 +209,7 @@ where
 
     /// Removes the pending node from the bucket, if any.
     pub fn remove_pending(&mut self) -> Option<PendingNode<TKey, TVal>> {
-        self.pending.take()
+        self.weighted.remove_pending()
     }
 
     /// Updates the status of the node referred to by the given key, if it is
@@ -258,6 +258,33 @@ where
         result
     }
 
+    /// Removes the node with the given key from the bucket, if it exists.
+    pub fn remove(&mut self, key: &TKey) -> Option<(Node<TKey, TVal>, NodeStatus, Position)> {
+        unimplemented!()
+        // if let Some(pos) = self.position(key) {
+        //     // Remove the node from its current position.
+        //     let status = self.status(pos);
+        //     let node = self.nodes.remove(pos.0);
+        //     // Adjust `first_connected_pos` accordingly.
+        //     match status {
+        //         NodeStatus::Connected =>
+        //             if self.first_connected_pos.map_or(false, |p| p == pos.0) {
+        //                 if pos.0 == self.nodes.len() {
+        //                     // It was the last connected node.
+        //                     self.first_connected_pos = None
+        //                 }
+        //             }
+        //         NodeStatus::Disconnected =>
+        //             if let Some(ref mut p) = self.first_connected_pos {
+        //                 *p -= 1;
+        //             }
+        //     }
+        //     Some((node, status, pos))
+        // } else {
+        //     None
+        // }
+    }
+
     fn is_full(&self, weighted: bool) -> bool {
         if weighted {
             self.weighted.is_full()
@@ -266,19 +293,11 @@ where
         }
     }
 
-    /// Returns the status of the node at the given position.
-    pub fn status(&self, pos: Position) -> NodeStatus {
-        if self.first_connected_pos.map_or(false, |i| pos.0 >= i) {
-            NodeStatus::Connected
-        } else {
-            self.swamp.pending_active()
-        }
-    }
-
     pub fn num_entries(&self) -> usize {
         self.swamp.num_entries() + self.weighted.num_entries()
     }
 
+    /// Returns the status of the node with a given key
     pub fn status(&self, key: &TKey) -> Option<NodeStatus> {
         self.weighted.status(key).or(self.swamp.status(key))
     }
