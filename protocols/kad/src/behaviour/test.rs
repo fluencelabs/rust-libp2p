@@ -952,15 +952,15 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 
     // Make `bob` and `trudy` aware of their version of the record searched by
     // `alice`.
-    bob.1.store.put(record_bob.clone()).unwrap();
-    trudy.1.store.put(record_trudy.clone()).unwrap();
+    bob.2.store.put(record_bob.clone()).unwrap();
+    trudy.2.store.put(record_trudy.clone()).unwrap();
 
     // Make `trudy` and `bob` known to `alice`.
-    alice.1.add_address(Swarm::local_peer_id(&trudy.1), trudy.0.clone());
-    alice.1.add_address(Swarm::local_peer_id(&bob.1), bob.0.clone());
+    alice.2.add_address(Swarm::local_peer_id(&trudy.2), trudy.1.clone(), trudy.0.public());
+    alice.2.add_address(Swarm::local_peer_id(&bob.2), bob.1.clone(), bob.0.public());
 
     // Drop the swarm addresses.
-    let (mut alice, mut bob, mut trudy) = (alice.1, bob.1, trudy.1);
+    let (mut alice, mut bob, mut trudy) = (alice.2, bob.2, trudy.2);
 
     // Have `alice` query the Dht for `key` with a quorum of 1.
     alice.get_record(&key, Quorum::One);
@@ -1077,16 +1077,16 @@ fn manual_bucket_inserts() {
     let mut swarms = build_connected_nodes_with_config(3, 1, cfg);
     // The peers and their addresses for which we expect `RoutablePeer` events.
     let mut expected = swarms.iter().skip(2)
-        .map(|(a, s)| (a.clone(), Swarm::local_peer_id(s).clone()))
+        .map(|(_, a, s)| (a.clone(), Swarm::local_peer_id(s).clone()))
         .collect::<HashMap<_,_>>();
     // We collect the peers for which a `RoutablePeer` event
     // was received in here to check at the end of the test
     // that none of them was inserted into a bucket.
     let mut routable = Vec::new();
     // Start an iterative query from the first peer.
-    swarms[0].1.get_closest_peers(PeerId::random());
+    swarms[0].2.get_closest_peers(PeerId::random());
     block_on(poll_fn(move |ctx| {
-        for (_, swarm) in swarms.iter_mut() {
+        for (_, _, swarm) in swarms.iter_mut() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
                     Poll::Ready(Some(KademliaEvent::RoutablePeer {
