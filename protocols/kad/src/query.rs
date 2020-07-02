@@ -446,13 +446,21 @@ impl<TInner> Query<TInner> {
     /// [`QueryPoolState::Finished`].
     pub fn try_finish<'a, I>(&mut self, peers: I) -> bool
     where
-        I: IntoIterator<Item = &'a PeerId>
+        I: IntoIterator<Item = &'a PeerId> + Clone
     {
-        match &mut self.peer_iter {
+        let weighted = match &mut self.weighted_iter {
+            QueryPeerIter::Closest(iter) => { iter.finish(); true },
+            QueryPeerIter::ClosestDisjoint(iter) => iter.finish_paths(peers.clone()),
+            QueryPeerIter::Fixed(iter) => { iter.finish(); true },
+        };
+
+        let swamp = match &mut self.swamp_iter {
             QueryPeerIter::Closest(iter) => { iter.finish(); true },
             QueryPeerIter::ClosestDisjoint(iter) => iter.finish_paths(peers),
-            QueryPeerIter::Fixed(iter) => { iter.finish(); true }
-        }
+            QueryPeerIter::Fixed(iter) => { iter.finish(); true },
+        };
+
+        weighted && swamp
     }
 
     /// Finishes the query prematurely.

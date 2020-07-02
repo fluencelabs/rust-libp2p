@@ -144,7 +144,7 @@ impl ClosestDisjointPeersIter {
     /// calling this function has no effect and `false` is returned.
     pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
     where
-        I: IntoIterator<Item = PeerId>,
+        I: IntoIterator<Item = Key<PeerId>>,
     {
         let mut updated = false;
 

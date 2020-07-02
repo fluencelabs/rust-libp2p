@@ -208,8 +208,8 @@ where
     }
 
     /// Removes the pending node from the bucket, if any.
-    pub fn remove_pending(&mut self) -> Option<PendingNode<TKey, TVal>> {
-        self.weighted.remove_pending()
+    pub fn remove_pending(&mut self, key: &TKey) -> Option<PendingNode<TKey, TVal>> {
+        self.weighted.remove_pending(key).or_else(|| self.swamp.remove_pending(key))
     }
 
     /// Updates the status of the node referred to by the given key, if it is
@@ -260,29 +260,7 @@ where
 
     /// Removes the node with the given key from the bucket, if it exists.
     pub fn remove(&mut self, key: &TKey) -> Option<(Node<TKey, TVal>, NodeStatus, Position)> {
-        unimplemented!()
-        // if let Some(pos) = self.position(key) {
-        //     // Remove the node from its current position.
-        //     let status = self.status(pos);
-        //     let node = self.nodes.remove(pos.0);
-        //     // Adjust `first_connected_pos` accordingly.
-        //     match status {
-        //         NodeStatus::Connected =>
-        //             if self.first_connected_pos.map_or(false, |p| p == pos.0) {
-        //                 if pos.0 == self.nodes.len() {
-        //                     // It was the last connected node.
-        //                     self.first_connected_pos = None
-        //                 }
-        //             }
-        //         NodeStatus::Disconnected =>
-        //             if let Some(ref mut p) = self.first_connected_pos {
-        //                 *p -= 1;
-        //             }
-        //     }
-        //     Some((node, status, pos))
-        // } else {
-        //     None
-        // }
+        self.weighted.remove(key).or_else(|| self.swamp.remove(key))
     }
 
     fn is_full(&self, weighted: bool) -> bool {

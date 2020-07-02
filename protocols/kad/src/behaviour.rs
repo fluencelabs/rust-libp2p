@@ -441,7 +441,7 @@ where
     /// a [`KademliaEvent::RoutingUpdated`] event is emitted.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr, public_key: PublicKey) -> RoutingUpdate {
         let key = kbucket::Key::new(peer.clone());
-        match self.kbuckets.entry(&key) {
+        let result = match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
                 if entry.value().insert(address) {
                     self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -479,9 +479,10 @@ where
                 status
             },
             kbucket::Entry::SelfEntry => RoutingUpdate::Failed,
-        }
+        };
 
         self.print_bucket_table();
+        result
     }
 
     /// Removes an address of a peer from the routing table.
@@ -500,14 +501,14 @@ where
         let key = kbucket::Key::new(peer.clone());
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
-                if entry.value().remove(address).is_err() {
+                if entry.value().addresses.remove(address, Remove::Completely).is_err() {
                     Some(entry.remove()) // it is the last address, thus remove the peer.
                 } else {
                     None
                 }
             }
             kbucket::Entry::Pending(mut entry, _) => {
-                if entry.value().remove(address).is_err() {
+                if entry.value().addresses.remove(address, Remove::Completely).is_err() {
                     Some(entry.remove()) // it is the last address, thus remove the peer.
                 } else {
                     None
@@ -952,8 +953,9 @@ where
                         ));
                     }
                     (Some(c), KademliaBucketInserts::Manual) => {
+                        let address = c.addresses.iter().last().expect("addresses can't be empty here").clone();
                         self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::RoutablePeer { peer, address: c.addresses.last } // TODO
+                            KademliaEvent::RoutablePeer { peer, address }
                         ));
                     }
                     (Some(contact), KademliaBucketInserts::OnConnected) => {
@@ -990,6 +992,8 @@ where
             bs58::encode(contact.public_key.encode().to_vec().as_slice()).into_string(),
             weight
         );
+        // TODO: how to avoid clone when bucket isn't Full?
+        let address = contact.addresses.iter().last().expect("addresses can't be empty here").clone();
         match entry.insert(contact, status, weight) {
             kbucket::InsertResult::Inserted => {
                 (
@@ -1010,7 +1014,7 @@ where
                 (
                     RoutingUpdate::Failed,
                     vec![NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::RoutablePeer { peer, address: addresses.last } // TODO: fix compilation
+                        KademliaEvent::RoutablePeer { peer, address }
                     )]
                 )
             },
@@ -1573,7 +1577,7 @@ where
 
     fn print_bucket_table(&mut self) {
         let mut size = 0;
-        let buckets = self.kbuckets.buckets().filter_map(|KBucketRef { index, bucket }| {
+        let buckets = self.kbuckets.iter().filter_map(|KBucketRef { index, bucket }| {
             use multiaddr::Protocol::{Ip4, Ip6, Tcp};
             let elems = bucket.iter().collect::<Vec<_>>();
             if elems.len() == 0 {
