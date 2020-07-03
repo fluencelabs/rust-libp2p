@@ -69,7 +69,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (ed25519::Keypair, Multiaddr, 
 
     let local_id = local_public_key.clone().into_peer_id();
     let store = MemoryStore::new(local_id.clone());
-    let trust = TrustGraph::new(Vec::new());
+    let trust = TrustGraph::new(vec![(ed25519_key.public(), 1)]);
     let behaviour = Kademlia::with_config(ed25519_key.clone(), local_id.clone(), store, cfg.clone(), trust);
 
     let mut swarm = Swarm::new(transport, behaviour, local_id);
@@ -160,7 +160,7 @@ fn bootstrap() {
         // or smaller than K_VALUE.
         let num_group = rng.gen_range(1, (num_total % K_VALUE.get()) + 2);
 
-        let mut cfg = KademliaConfig::default();
+        let cfg = KademliaConfig::default();
         if rng.gen() {
             // TODO: fixme
             // cfg.disjoint_query_paths(true);
@@ -1114,4 +1114,79 @@ fn manual_bucket_inserts() {
         }
         Poll::Pending
     }));
+}
+
+fn make_swarms(total: usize, config: KademliaConfig) -> Vec<(Keypair, Multiaddr, TestSwarm)> {
+    let mut fully_connected_swarms = build_fully_connected_nodes_with_config(
+        total - 1,
+        config.clone(),
+    );
+
+    let mut single_swarm = build_node_with_config(config);
+    // Connect `single_swarm` to three bootnodes.
+    for i in 0..3 {
+        single_swarm.2.add_address(
+            Swarm::local_peer_id(&fully_connected_swarms[0].2),
+            fully_connected_swarms[i].1.clone(),
+            fully_connected_swarms[i].0.public(),
+        );
+    }
+
+    let mut swarms = vec![single_swarm];
+    swarms.append(&mut fully_connected_swarms);
+
+    // Drop addresses before returning.
+    swarms.into_iter().collect::<Vec<_>>()
+}
+
+#[cfg(test)]
+mod certificates {
+    use super::*;
+    use trust_graph::{KeyPair, current_time};
+    use log::LevelFilter;
+
+    fn gen_cert(from: KeyPair, to: KeyPair) -> (KeyPair, Certificate) {
+        let second_kp = KeyPair::generate();
+
+        let cur_time = current_time();
+
+        (
+            second_kp.clone(),
+            Certificate::issue_root(
+                &from,
+                to.public_key(),
+                cur_time.checked_add(Duration::new(60, 0)).unwrap(),
+                cur_time,
+            ),
+        )
+    }
+
+    #[test]
+    pub fn certificate_propagation() {
+        // env_logger::builder().filter_level(LevelFilter::Info).init();
+
+        let mut config = KademliaConfig::default();
+        config.set_replication_factor(NonZeroUsize::new(3).unwrap());
+        let mut swarms = build_fully_connected_nodes_with_config(3, config);
+        let (_, cert) = gen_cert(swarms[0].0.clone().into(), swarms[1].0.clone().into());
+        println!("issued cert {:?} from {} for {}", cert, swarms[0].2.kbuckets.local_key().preimage(), swarms[1].2.kbuckets.local_key().preimage());
+        swarms[0].2.trust.add(&cert, current_time()).unwrap();
+        // swarms[2].2.trust.add(&cert, current_time()).unwrap();
+
+        swarms[2].2.get_closest_peers(PeerId::random());
+        block_on(poll_fn(move |ctx| {
+            for (_, _, swarm) in swarms.iter_mut() {
+                loop {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(KademliaEvent::QueryResult { .. })) => {
+                                return Poll::Ready(())
+                        }
+                        Poll::Ready(_) => {},
+                        Poll::Pending => break
+                    }
+                }
+            }
+            Poll::Pending
+        }));
+    }
 }
