@@ -407,11 +407,11 @@ fn get_record_not_found() {
         .cloned()
         .collect();
 
-    let public0 = swarms[0].0.public();
     let public1 = swarms[1].0.public();
+    let public2 = swarms[1].0.public();
     let (second, third) = (swarms[1].1.clone(), swarms[2].1.clone());
-    swarms[0].2.add_address(&swarm_ids[1], second, public0);
-    swarms[1].2.add_address(&swarm_ids[2], third, public1);
+    swarms[0].2.add_address(&swarm_ids[1], second, public1);
+    swarms[1].2.add_address(&swarm_ids[2], third, public2);
 
     // Drop the swarm addresses.
     let mut swarms = swarms.into_iter().map(|(_, _addr, swarm)| swarm).collect::<Vec<_>>();
