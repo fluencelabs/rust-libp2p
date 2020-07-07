@@ -1143,7 +1143,6 @@ fn make_swarms(total: usize, config: KademliaConfig) -> Vec<(Keypair, Multiaddr,
 mod certificates {
     use super::*;
     use trust_graph::{KeyPair, current_time};
-    use log::LevelFilter;
 
     fn gen_cert(from: KeyPair, to: KeyPair) -> (KeyPair, Certificate) {
         let second_kp = KeyPair::generate();

@@ -810,11 +810,10 @@ where
         // Add certificates to trust graph
         let cur_time = trust_graph::current_time();
         for peer in peers.clone() {
-            println!("{} discovered {:?} from {}", self.kbuckets.local_key().preimage(), peer, source);
             for cert in peer.certificates.iter() {
                 match self.trust.add(cert, cur_time) {
-                    Ok(_) => println!("{} added cert {:?} from {}", self.kbuckets.local_key().preimage(), cert, source),
-                    Err(err) => println!("Unable to add certificate for peer {}: {}", peer.node_id, err),
+                    Ok(_) => log::trace!("{} added cert {:?} from {}", self.kbuckets.local_key().preimage(), cert, source),
+                    Err(err) => log::info!("Unable to add certificate for peer {}: {}", peer.node_id, err),
                 }
             }
         }
