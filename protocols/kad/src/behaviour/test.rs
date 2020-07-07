@@ -99,14 +99,14 @@ fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaCon
 {
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_ids: Vec<_> = swarms.iter()
-        .map(|(_, addr, swarm)| (addr.clone(), Swarm::local_peer_id(swarm).clone()))
+        .map(|(kp, addr, swarm)| (kp.public(), addr.clone(), Swarm::local_peer_id(swarm).clone()))
         .collect();
 
     let mut i = 0;
-    for (j, (addr, peer_id)) in swarm_ids.iter().enumerate().skip(1) {
-        if i < swarm_ids.len() {
-            let public = swarms[i].0.public();
-            swarms[i].2.add_address(peer_id, addr.clone(), public);
+    let swarms_total = swarm_ids.len();
+    for (j, (pk, addr, peer_id)) in swarm_ids.into_iter().enumerate().skip(1) {
+        if i < swarms_total {
+            swarms[i].2.add_address(&peer_id, addr.clone(), pk);
         }
         if j % step == 0 {
             i += step;
@@ -178,6 +178,7 @@ fn bootstrap() {
             .cloned()
             .collect();
 
+        println!("bootstrap is {}", swarms[0].kbuckets.local_key().preimage());
         let qid = swarms[0].bootstrap().unwrap();
 
         // Expected known peers
