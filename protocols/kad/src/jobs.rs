@@ -61,7 +61,7 @@
 //! > to the size of all stored records. As a job runs, the records are moved
 //! > out of the job to the consumer, where they can be dropped after being sent.
 
-use crate::record::{self, Record, ProviderRecord, store::RecordStore};
+use crate::record::{self, Record, ProviderRecord, store::RecordStore, RecordT};
 use libp2p_core::PeerId;
 use futures::prelude::*;
 use std::collections::HashSet;
@@ -128,16 +128,16 @@ enum PeriodicJobState<T> {
 // PutRecordJob
 
 /// Periodic job for replicating / publishing records.
-pub struct PutRecordJob {
+pub struct PutRecordJob<TRecord: RecordT> {
     local_id: PeerId,
     next_publish: Option<Instant>,
     publish_interval: Option<Duration>,
     record_ttl: Option<Duration>,
-    skipped: HashSet<record::Key>,
-    inner: PeriodicJob<vec::IntoIter<Record>>,
+    skipped: HashSet<TRecord::Key>,
+    inner: PeriodicJob<vec::IntoIter<TRecord>>,
 }
 
-impl PutRecordJob {
+impl<TRecord: RecordT> PutRecordJob<TRecord> {
     /// Creates a new periodic job for replicating and re-publishing
     /// locally stored records.
     pub fn new(
@@ -165,7 +165,7 @@ impl PutRecordJob {
 
     /// Adds the key of a record that is ignored on the current or
     /// next run of the job.
-    pub fn skip(&mut self, key: record::Key) {
+    pub fn skip(&mut self, key: TRecord::Key) {
         self.skipped.insert(key);
     }
 
@@ -192,7 +192,7 @@ impl PutRecordJob {
     /// to be run.
     pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<Record>
     where
-        for<'a> T: RecordStore<'a>
+        for<'a> T: RecordStore<'a, TRecord>
     {
         if self.inner.is_ready(cx, now) {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
@@ -251,11 +251,11 @@ impl PutRecordJob {
 // AddProviderJob
 
 /// Periodic job for replicating provider records.
-pub struct AddProviderJob {
-    inner: PeriodicJob<vec::IntoIter<ProviderRecord>>
+pub struct AddProviderJob<TRecord: RecordT> {
+    inner: PeriodicJob<vec::IntoIter<ProviderRecord<TRecord>>>
 }
 
-impl AddProviderJob {
+impl<TRecord: RecordT> AddProviderJob<TRecord> {
     /// Creates a new periodic job for provider announcements.
     pub fn new(interval: Duration) -> Self {
         let now = Instant::now();
@@ -288,9 +288,9 @@ impl AddProviderJob {
     /// Must be called in the context of a task. When `NotReady` is returned,
     /// the current task is registered to be notified when the job is ready
     /// to be run.
-    pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<ProviderRecord>
+    pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<ProviderRecord<TRecord>>
     where
-        for<'a> T: RecordStore<'a>
+        for<'a> T: RecordStore<'a, TRecord>
     {
         if self.inner.is_ready(cx, now) {
             let records = store.provided()
@@ -331,7 +331,7 @@ mod tests {
     use rand::Rng;
     use super::*;
 
-    fn rand_put_record_job() -> PutRecordJob {
+    fn rand_put_record_job() -> PutRecordJob<Record> {
         let mut rng = rand::thread_rng();
         let id = PeerId::random();
         let replicate_interval = Duration::from_secs(rng.gen_range(1, 60));
@@ -340,7 +340,7 @@ mod tests {
         PutRecordJob::new(id.clone(), replicate_interval, publish_interval, record_ttl)
     }
 
-    fn rand_add_provider_job() -> AddProviderJob {
+    fn rand_add_provider_job() -> AddProviderJob<Record> {
         let mut rng = rand::thread_rng();
         let interval = Duration::from_secs(rng.gen_range(1, 60));
         AddProviderJob::new(interval)
@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn run_add_provider_job() {
-        fn prop(records: Vec<ProviderRecord>) {
+        fn prop(records: Vec<ProviderRecord<Record>>) {
             let mut job = rand_add_provider_job();
             let id = PeerId::random();
             // Fill a record store.

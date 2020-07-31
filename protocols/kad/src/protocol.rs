@@ -29,7 +29,7 @@
 use bytes::BytesMut;
 use codec::UviBytes;
 use crate::dht_proto as proto;
-use crate::record::{self, Record};
+use crate::record::{self, Record, RecordT};
 use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
@@ -43,6 +43,8 @@ use wasm_timer::Instant;
 use derivative::Derivative;
 use libp2p_core::identity::ed25519::PublicKey;
 use trust_graph::{Certificate, Trust};
+use core::marker::PhantomData;
+use std::convert::TryInto;
 
 /// The protocol name used for negotiating with multistream-select.
 pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";
@@ -188,13 +190,14 @@ impl Into<proto::message::Peer> for KadPeer {
 //       only one request, then we can change the output of the `InboundUpgrade` and
 //       `OutboundUpgrade` to be just a single message
 #[derive(Debug, Clone)]
-pub struct KademliaProtocolConfig {
+pub struct KademliaProtocolConfig<TRecord> {
     protocol_name: Cow<'static, [u8]>,
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
+    phantom: PhantomData<TRecord>
 }
 
-impl KademliaProtocolConfig {
+impl<TRecord> KademliaProtocolConfig<TRecord> {
     /// Returns the configured protocol name.
     pub fn protocol_name(&self) -> &[u8] {
         &self.protocol_name
@@ -212,16 +215,17 @@ impl KademliaProtocolConfig {
     }
 }
 
-impl Default for KademliaProtocolConfig {
+impl<TRecord> Default for KademliaProtocolConfig<TRecord> {
     fn default() -> Self {
         KademliaProtocolConfig {
             protocol_name: Cow::Borrowed(DEFAULT_PROTO_NAME),
             max_packet_size: 4096,
+            phantom: <_>::default(),
         }
     }
 }
 
-impl UpgradeInfo for KademliaProtocolConfig {
+impl<TRecord> UpgradeInfo for KademliaProtocolConfig<TRecord> {
     type Info = Cow<'static, [u8]>;
     type InfoIter = iter::Once<Self::Info>;
 
@@ -230,11 +234,11 @@ impl UpgradeInfo for KademliaProtocolConfig {
     }
 }
 
-impl<C> InboundUpgrade<C> for KademliaProtocolConfig
+impl<C, TRecord: RecordT> InboundUpgrade<C> for KademliaProtocolConfig<TRecord>
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = KadInStreamSink<C>;
+    type Output = KadInStreamSink<C, TRecord>;
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
@@ -262,11 +266,11 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
+impl<C, TRecord: RecordT> OutboundUpgrade<C> for KademliaProtocolConfig<TRecord>
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = KadOutStreamSink<C>;
+    type Output = KadOutStreamSink<C, TRecord>;
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
@@ -295,10 +299,10 @@ where
 }
 
 /// Sink of responses and stream of requests.
-pub type KadInStreamSink<S> = KadStreamSink<S, KadResponseMsg, KadRequestMsg>;
+pub type KadInStreamSink<S, TRecord: RecordT> = KadStreamSink<S, KadResponseMsg<TRecord>, KadRequestMsg<TRecord>>;
 
 /// Sink of requests and stream of responses.
-pub type KadOutStreamSink<S> = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
+pub type KadOutStreamSink<S, TRecord: RecordT> = KadStreamSink<S, KadRequestMsg<TRecord>, KadResponseMsg<TRecord>>;
 
 pub type KadStreamSink<S, A, B> = stream::AndThen<
     sink::With<
@@ -314,7 +318,7 @@ pub type KadStreamSink<S, A, B> = stream::AndThen<
 
 /// Request that we can send to a peer or that we received from a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum KadRequestMsg {
+pub enum KadRequestMsg<TRecord: RecordT> {
     /// Ping request.
     Ping,
 
@@ -329,13 +333,13 @@ pub enum KadRequestMsg {
     /// this key.
     GetProviders {
         /// Identifier being searched.
-        key: record::Key,
+        key: TRecord::Key,
     },
 
     /// Indicates that this list of providers is known for this key.
     AddProvider {
         /// Key for which we should add providers.
-        key: record::Key,
+        key: TRecord::Key,
         /// Known provider for this key.
         provider: KadPeer,
     },
@@ -343,18 +347,18 @@ pub enum KadRequestMsg {
     /// Request to get a value from the dht records.
     GetValue {
         /// The key we are searching for.
-        key: record::Key,
+        key: TRecord::Key,
     },
 
     /// Request to put a value into the dht records.
     PutValue {
-        record: Record,
+        record: TRecord,
     }
 }
 
 /// Response that we can send to a peer or that we received from a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum KadResponseMsg {
+pub enum KadResponseMsg<TRecord: RecordT> {
     /// Ping response.
     Pong,
 
@@ -375,7 +379,7 @@ pub enum KadResponseMsg {
     /// Response to a `GetValue`.
     GetValue {
         /// Result that might have been found
-        record: Option<Record>,
+        record: Option<TRecord>,
         /// Nodes closest to the key
         closer_peers: Vec<KadPeer>,
     },
@@ -383,14 +387,14 @@ pub enum KadResponseMsg {
     /// Response to a `PutValue`.
     PutValue {
         /// The key of the record.
-        key: record::Key,
+        key: TRecord::Key,
         /// Value of the record.
         value: Vec<u8>,
     },
 }
 
 /// Converts a `KadRequestMsg` into the corresponding protobuf message for sending.
-fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
+fn req_msg_to_proto<TRecord: RecordT>(kad_msg: KadRequestMsg<TRecord>) -> proto::Message {
     match kad_msg {
         KadRequestMsg::Ping => proto::Message {
             r#type: proto::message::MessageType::Ping as i32,
@@ -404,33 +408,33 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
         },
         KadRequestMsg::GetProviders { key } => proto::Message {
             r#type: proto::message::MessageType::GetProviders as i32,
-            key: key.to_vec(),
+            key: key.as_ref().to_vec(),
             cluster_level_raw: 10,
             .. proto::Message::default()
         },
         KadRequestMsg::AddProvider { key, provider } => proto::Message {
             r#type: proto::message::MessageType::AddProvider as i32,
             cluster_level_raw: 10,
-            key: key.to_vec(),
+            key: key.as_ref().to_vec(),
             provider_peers: vec![provider.into()],
             .. proto::Message::default()
         },
         KadRequestMsg::GetValue { key } => proto::Message {
             r#type: proto::message::MessageType::GetValue as i32,
             cluster_level_raw: 10,
-            key: key.to_vec(),
+            key: key.as_ref().to_vec(),
             .. proto::Message::default()
         },
         KadRequestMsg::PutValue { record } => proto::Message {
             r#type: proto::message::MessageType::PutValue as i32,
-            record: Some(record_to_proto(record)),
+            record: Some(record.into()),
             .. proto::Message::default()
         }
     }
 }
 
 /// Converts a `KadResponseMsg` into the corresponding protobuf message for sending.
-fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
+fn resp_msg_to_proto<TRecord: RecordT>(kad_msg: KadResponseMsg<TRecord>) -> proto::Message {
     match kad_msg {
         KadResponseMsg::Pong => proto::Message {
             r#type: proto::message::MessageType::Ping as i32,
@@ -453,14 +457,14 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
             r#type: proto::message::MessageType::GetValue as i32,
             cluster_level_raw: 9,
             closer_peers: closer_peers.into_iter().map(KadPeer::into).collect(),
-            record: record.map(record_to_proto),
+            record: record.map(|r| r.into()),
             .. proto::Message::default()
         },
         KadResponseMsg::PutValue { key, value } => proto::Message {
             r#type: proto::message::MessageType::PutValue as i32,
-            key: key.to_vec(),
+            key: key.as_ref().to_vec(),
             record: Some(proto::Record {
-                key: key.to_vec(),
+                key: key.as_ref().to_vec(),
                 value,
                 .. proto::Record::default()
             }),
@@ -472,24 +476,24 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
 /// Converts a received protobuf message into a corresponding `KadRequestMsg`.
 ///
 /// Fails if the protobuf message is not a valid and supported Kademlia request message.
-fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error> {
+fn proto_to_req_msg<TRecord: RecordT>(message: proto::Message) -> Result<KadRequestMsg<TRecord>, io::Error> {
     let msg_type = proto::message::MessageType::from_i32(message.r#type)
         .ok_or_else(|| invalid_data(format!("unknown message type: {}", message.r#type)))?;
 
     match msg_type {
         proto::message::MessageType::Ping => Ok(KadRequestMsg::Ping),
         proto::message::MessageType::PutValue => {
-            let record = record_from_proto(message.record.unwrap_or_default())?;
+            let record = message.record.unwrap_or_default().try_into()?;
             Ok(KadRequestMsg::PutValue { record })
         }
         proto::message::MessageType::GetValue => {
-            Ok(KadRequestMsg::GetValue { key: record::Key::from(message.key) })
+            Ok(KadRequestMsg::GetValue { key: TRecord::Key::from(message.key) })
         }
         proto::message::MessageType::FindNode => {
             Ok(KadRequestMsg::FindNode { key: message.key })
         }
         proto::message::MessageType::GetProviders => {
-            Ok(KadRequestMsg::GetProviders { key: record::Key::from(message.key)})
+            Ok(KadRequestMsg::GetProviders { key: TRecord::Key::from(message.key)})
         }
         proto::message::MessageType::AddProvider => {
             // TODO: for now we don't parse the peer properly, so it is possible that we get
@@ -500,7 +504,7 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
                 .find_map(|peer| KadPeer::try_from(peer).ok());
 
             if let Some(provider) = provider {
-                let key = record::Key::from(message.key);
+                let key = TRecord::Key::from(message.key);
                 Ok(KadRequestMsg::AddProvider { key, provider })
             } else {
                 Err(invalid_data("AddProvider message with no valid peer."))
@@ -512,7 +516,7 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
 /// Converts a received protobuf message into a corresponding `KadResponseMessage`.
 ///
 /// Fails if the protobuf message is not a valid and supported Kademlia response message.
-fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Error> {
+fn proto_to_resp_msg<TRecord: RecordT>(message: proto::Message) -> Result<KadResponseMsg<TRecord>, io::Error> {
     let msg_type = proto::message::MessageType::from_i32(message.r#type)
         .ok_or_else(|| invalid_data(format!("unknown message type: {}", message.r#type)))?;
 
@@ -521,7 +525,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
         proto::message::MessageType::GetValue => {
             let record =
                 if let Some(r) = message.record {
-                    Some(record_from_proto(r)?)
+                    Some(r.try_into()?)
                 } else {
                     None
                 };
@@ -557,7 +561,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
         }
 
         proto::message::MessageType::PutValue => {
-            let key = record::Key::from(message.key);
+            let key = TRecord::Key::from(message.key);
             let rec = message.record.ok_or_else(|| {
                 invalid_data("received PutValue message with no record")
             })?;
@@ -570,48 +574,6 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
 
         proto::message::MessageType::AddProvider =>
             Err(invalid_data("received an unexpected AddProvider message"))
-    }
-}
-
-pub fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
-    let key = record::Key::from(record.key);
-    let value = record.value;
-
-    let publisher =
-        if !record.publisher.is_empty() {
-            PeerId::from_bytes(record.publisher)
-                .map(Some)
-                .map_err(|_| invalid_data("Invalid publisher peer ID."))?
-        } else {
-            None
-        };
-
-    let expires =
-        if record.ttl > 0 {
-            Some(Instant::now() + Duration::from_secs(record.ttl as u64))
-        } else {
-            None
-        };
-
-    Ok(Record { key, value, publisher, expires })
-}
-
-pub fn record_to_proto(record: Record) -> proto::Record {
-    proto::Record {
-        key: record.key.to_vec(),
-        value: record.value,
-        publisher: record.publisher.map(PeerId::into_bytes).unwrap_or_default(),
-        ttl: record.expires
-            .map(|t| {
-                let now = Instant::now();
-                if t > now {
-                    (t - now).as_secs() as u32
-                } else {
-                    1 // because 0 means "does not expire"
-                }
-            })
-            .unwrap_or(0),
-        time_received: String::new()
     }
 }
 

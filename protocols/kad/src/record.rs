@@ -28,6 +28,40 @@ use multihash::Multihash;
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use wasm_timer::Instant;
+use crate::dht_proto as proto;
+use uint::static_assertions::_core::convert::TryFrom;
+use std::time::Duration;
+use std::io;
+use std::fmt::Debug;
+
+pub trait RecordT: Eq+ Send + Clone + Debug + Into<proto::Record> + TryFrom<proto::Record, Error = io::Error> + 'static {
+    type Key: Clone + Send + AsRef<[u8]> + Borrow<[u8]> + From<Vec<u8>> + Hash + Eq;
+
+    fn key(&self) -> &Self::Key;
+    fn is_expired(&self, now: Instant) -> bool;
+    fn publisher(&self) -> Option<&PeerId>;
+    fn set_publisher(&mut self, publisher: PeerId);
+}
+
+impl RecordT for Record {
+    type Key = Key;
+
+    fn key(&self) -> &Self::Key {
+        &self.key
+    }
+
+    fn is_expired(&self, now: Instant) -> bool {
+        self.is_expired(now)
+    }
+
+    fn publisher(&self) -> Option<&PeerId> {
+        self.publisher.as_ref()
+    }
+
+    fn set_publisher(&mut self, publisher: PeerId) {
+        self.publisher = Some(publisher)
+    }
+}
 
 /// The (opaque) key of a record.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -102,12 +136,60 @@ impl Record {
     }
 }
 
+impl Into<proto::Record> for Record {
+    fn into(self) -> proto::Record {
+        proto::Record {
+            key: self.key.as_ref().to_vec(),
+            value: self.value,
+            publisher: self.publisher.map(PeerId::into_bytes).unwrap_or_default(),
+            ttl: self.expires
+                .map(|t| {
+                    let now = Instant::now();
+                    if t > now {
+                        (t - now).as_secs() as u32
+                    } else {
+                        1 // because 0 means "does not expire"
+                    }
+                })
+                .unwrap_or(0),
+            time_received: String::new()
+        }
+    }
+}
+
+impl TryFrom<proto::Record> for Record {
+    type Error = io::Error;
+
+    fn try_from(record: proto::Record) -> Result<Self, Self::Error> {
+        let key = Key::from(record.key);
+        let value = record.value;
+
+        let publisher =
+            if !record.publisher.is_empty() {
+                PeerId::from_bytes(record.publisher)
+                    .map(Some)
+                    .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid publisher peer ID."))?
+            } else {
+                None
+            };
+
+        let expires =
+            if record.ttl > 0 {
+                Some(Instant::now() + Duration::from_secs(record.ttl as u64))
+            } else {
+                None
+            };
+
+        Ok(Record { key, value, publisher, expires })
+    }
+}
+
 /// A record stored in the DHT whose value is the ID of a peer
 /// who can provide the value on-demand.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProviderRecord {
+pub struct ProviderRecord<TRecord: RecordT> {
     /// The key whose value is provided by the provider.
-    pub key: Key,
+    pub key: TRecord::Key,
     /// The provider of the value for the key.
     pub provider: PeerId,
     /// The expiration time as measured by a local, monotonic clock.
@@ -115,18 +197,20 @@ pub struct ProviderRecord {
     // pub weight: u32 // TODO: weight
 }
 
-impl Hash for ProviderRecord {
+impl<TRecord: RecordT> Hash for ProviderRecord<TRecord>
+where TRecord::Key: Hash
+{
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.key.hash(state);
         self.provider.hash(state);
     }
 }
 
-impl ProviderRecord {
+impl<TRecord: RecordT> ProviderRecord<TRecord> {
     /// Creates a new provider record for insertion into a `RecordStore`.
     pub fn new<K>(key: K, provider: PeerId) -> Self
     where
-        K: Into<Key>
+        K: Into<TRecord::Key>
     {
         ProviderRecord {
             key: key.into(), provider, expires: None
@@ -169,8 +253,8 @@ mod tests {
         }
     }
 
-    impl Arbitrary for ProviderRecord {
-        fn arbitrary<G: Gen>(g: &mut G) -> ProviderRecord {
+    impl Arbitrary for ProviderRecord<Record> {
+        fn arbitrary<G: Gen>(g: &mut G) -> ProviderRecord<Record> {
             ProviderRecord {
                 key: Key::arbitrary(g),
                 provider: PeerId::random(),

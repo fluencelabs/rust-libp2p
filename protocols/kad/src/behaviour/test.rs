@@ -24,7 +24,7 @@ use super::*;
 
 use crate::K_VALUE;
 use crate::kbucket::Distance;
-use crate::record::{Key, store::MemoryStore};
+use crate::record::{Key, store::MemoryStore, Record};
 use futures::{
     prelude::*,
     executor::block_on,
@@ -49,13 +49,13 @@ use std::{collections::{HashSet, HashMap}, time::Duration, io, num::NonZeroUsize
 use multihash::{wrap, Code, Multihash};
 use libp2p_core::identity::ed25519;
 
-type TestSwarm = Swarm<Kademlia<MemoryStore>>;
+type TestSwarm = Swarm<Kademlia<MemoryStore<Record>, Record>>;
 
 fn build_node() -> (ed25519::Keypair, Multiaddr, TestSwarm) {
     build_node_with_config(Default::default())
 }
 
-fn build_node_with_config(cfg: KademliaConfig) -> (ed25519::Keypair, Multiaddr, TestSwarm) {
+fn build_node_with_config(cfg: KademliaConfig<Record>) -> (ed25519::Keypair, Multiaddr, TestSwarm) {
     let ed25519_key = ed25519::Keypair::generate();
     let local_key = identity::Keypair::Ed25519(ed25519_key.clone());
     let local_public_key = local_key.public();
@@ -86,7 +86,7 @@ fn build_nodes(num: usize) -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)> {
 }
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
-fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)> {
+fn build_nodes_with_config(num: usize, cfg: KademliaConfig<Record>) -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)> {
     (0..num).map(|_| build_node_with_config(cfg.clone())).collect()
 }
 
@@ -94,7 +94,7 @@ fn build_connected_nodes(total: usize, step: usize) -> Vec<(ed25519::Keypair, Mu
     build_connected_nodes_with_config(total, step, Default::default())
 }
 
-fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaConfig)
+fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaConfig<Record>)
     -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)>
 {
     let mut swarms = build_nodes_with_config(total, cfg);
@@ -116,7 +116,7 @@ fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaCon
     swarms
 }
 
-fn build_fully_connected_nodes_with_config(total: usize, cfg: KademliaConfig)
+fn build_fully_connected_nodes_with_config(total: usize, cfg: KademliaConfig<Record>)
     -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)>
 {
     let mut swarms = build_nodes_with_config(total, cfg);
@@ -1116,7 +1116,7 @@ fn manual_bucket_inserts() {
     }));
 }
 
-fn make_swarms(total: usize, config: KademliaConfig) -> Vec<(Keypair, Multiaddr, TestSwarm)> {
+fn make_swarms(total: usize, config: KademliaConfig<Record>) -> Vec<(Keypair, Multiaddr, TestSwarm)> {
     let mut fully_connected_swarms = build_fully_connected_nodes_with_config(
         total - 1,
         config.clone(),

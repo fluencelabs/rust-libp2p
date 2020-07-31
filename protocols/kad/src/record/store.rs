@@ -59,18 +59,18 @@ pub enum Error {
 ///      content. Just like a regular record, a provider record is distributed
 ///      to the closest nodes to the key.
 ///
-pub trait RecordStore<'a> {
-    type RecordsIter: Iterator<Item = Cow<'a, Record>>;
-    type ProvidedIter: Iterator<Item = Cow<'a, ProviderRecord>>;
+pub trait RecordStore<'a, TRecord: RecordT> {
+    type RecordsIter: Iterator<Item = Cow<'a, TRecord>>;
+    type ProvidedIter: Iterator<Item = Cow<'a, ProviderRecord<TRecord>>>;
 
     /// Gets a record from the store, given its key.
-    fn get(&'a self, k: &Key) -> Option<Cow<'_, Record>>;
+    fn get(&'a self, k: &TRecord::Key) -> Option<Cow<'_, TRecord>>;
 
     /// Puts a record into the store.
-    fn put(&'a mut self, r: Record) -> Result<()>;
+    fn put(&'a mut self, r: TRecord) -> Result<()>;
 
     /// Removes the record with the given key from the store.
-    fn remove(&'a mut self, k: &Key);
+    fn remove(&'a mut self, k: &TRecord::Key);
 
     /// Gets an iterator over all (value-) records currently stored.
     fn records(&'a self) -> Self::RecordsIter;
@@ -80,16 +80,16 @@ pub trait RecordStore<'a> {
     /// A record store only needs to store a number of provider records
     /// for a key corresponding to the replication factor and should
     /// store those records whose providers are closest to the key.
-    fn add_provider(&'a mut self, record: ProviderRecord) -> Result<()>;
+    fn add_provider(&'a mut self, record: ProviderRecord<TRecord>) -> Result<()>;
 
     /// Gets a copy of the stored provider records for the given key.
-    fn providers(&'a self, key: &Key) -> Vec<ProviderRecord>;
+    fn providers(&'a self, key: &TRecord::Key) -> Vec<ProviderRecord<TRecord>>;
 
     /// Gets an iterator over all stored provider records for which the
     /// node owning the store is itself the provider.
     fn provided(&'a self) -> Self::ProvidedIter;
 
     /// Removes a provider record from the store.
-    fn remove_provider(&'a mut self, k: &Key, p: &PeerId);
+    fn remove_provider(&'a mut self, k: &TRecord::Key, p: &PeerId);
 }
 

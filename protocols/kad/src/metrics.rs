@@ -23,6 +23,7 @@ use libp2p_swarm::NetworkBehaviourAction;
 
 use crate::handler::{KademliaHandlerEvent, KademliaHandlerIn};
 use crate::{KademliaEvent, QueryId};
+use crate::record::RecordT;
 
 pub(super) enum Kind {
     Request,
@@ -146,7 +147,7 @@ impl Metrics {
         self.with_metrics(|m| m.connected_nodes.inc());
     }
 
-    pub(super) fn received(&self, event: &KademliaHandlerEvent<QueryId>) {
+    pub(super) fn received<TRecord: RecordT>(&self, event: &KademliaHandlerEvent<QueryId, TRecord>) {
         use Kind::*;
 
         let (name, kind) = match event {
@@ -178,7 +179,7 @@ impl Metrics {
         });
     }
 
-    pub(super) fn sent(&self, event: &KademliaHandlerIn<QueryId>) {
+    pub(super) fn sent<TRecord: RecordT>(&self, event: &KademliaHandlerIn<QueryId, TRecord>) {
         use Kind::*;
 
         let (name, kind) = match event {
@@ -210,7 +211,7 @@ impl Metrics {
         });
     }
 
-    pub(super) fn generated_event_name(event: &KademliaEvent) -> &str {
+    pub(super) fn generated_event_name<TRecord: RecordT>(event: &KademliaEvent<TRecord>) -> &str {
         match event {
             KademliaEvent::QueryResult { .. } => "query_result",
             KademliaEvent::RoutingUpdated { .. } => "routing_updated",
@@ -220,9 +221,9 @@ impl Metrics {
         }
     }
 
-    pub(super) fn polled_event(
+    pub(super) fn polled_event<TRecord: RecordT>(
         &self,
-        event: &NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>,
+        event: &NetworkBehaviourAction<KademliaHandlerIn<QueryId, TRecord>, KademliaEvent<TRecord>>,
     ) {
         let name = match event {
             NetworkBehaviourAction::DialAddress { .. } => "dial_address",

@@ -31,7 +31,7 @@ use crate::jobs::*;
 use crate::kbucket::{self, KBucketsTable, NodeStatus, KBucketRef, KeyBytes};
 use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState, WeightedPeer};
-use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
+use crate::record::{self, store::{self, RecordStore}, ProviderRecord, RecordT};
 use crate::contact::Contact;
 use fnv::{FnvHashMap, FnvHashSet};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId, multiaddr};
@@ -61,7 +61,7 @@ pub use crate::query::QueryStats;
 
 /// `Kademlia` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
-pub struct Kademlia<TStore> {
+pub struct Kademlia<TStore, TRecord: RecordT> {
     /// The Kademlia routing table.
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Contact>,
 
@@ -69,10 +69,10 @@ pub struct Kademlia<TStore> {
     kbucket_inserts: KademliaBucketInserts,
 
     /// Configuration of the wire protocol.
-    protocol_config: KademliaProtocolConfig,
+    protocol_config: KademliaProtocolConfig<TRecord>,
 
     /// The currently active (i.e. in-progress) queries.
-    queries: QueryPool<QueryInner>,
+    queries: QueryPool<QueryInner<TRecord>>,
 
     /// The currently connected peers.
     ///
@@ -81,11 +81,11 @@ pub struct Kademlia<TStore> {
 
     /// Periodic job for re-publication of provider records for keys
     /// provided by the local node.
-    add_provider_job: Option<AddProviderJob>,
+    add_provider_job: Option<AddProviderJob<TRecord>>,
 
     /// Periodic job for (re-)replication and (re-)publishing of
     /// regular (value-)records.
-    put_record_job: Option<PutRecordJob>,
+    put_record_job: Option<PutRecordJob<TRecord>>,
 
     /// The TTL of regular (value-)records.
     record_ttl: Option<Duration>,
@@ -97,7 +97,7 @@ pub struct Kademlia<TStore> {
     connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
-    queued_events: VecDeque<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>,
+    queued_events: VecDeque<NetworkBehaviourAction<KademliaHandlerIn<QueryId, TRecord>, KademliaEvent<TRecord>>>,
 
     /// The record storage.
     store: TStore,
@@ -138,10 +138,10 @@ pub enum KademliaBucketInserts {
 ///
 /// The configuration is consumed by [`Kademlia::new`].
 #[derive(Debug, Clone)]
-pub struct KademliaConfig {
+pub struct KademliaConfig<TRecord> {
     kbucket_pending_timeout: Duration,
     query_config: QueryConfig,
-    protocol_config: KademliaProtocolConfig,
+    protocol_config: KademliaProtocolConfig<TRecord>,
     record_ttl: Option<Duration>,
     record_replication_interval: Option<Duration>,
     record_publication_interval: Option<Duration>,
@@ -151,7 +151,7 @@ pub struct KademliaConfig {
     kbucket_inserts: KademliaBucketInserts,
 }
 
-impl Default for KademliaConfig {
+impl<TRecord> Default for KademliaConfig<TRecord> {
     fn default() -> Self {
         KademliaConfig {
             kbucket_pending_timeout: Duration::from_secs(60),
@@ -168,7 +168,7 @@ impl Default for KademliaConfig {
     }
 }
 
-impl KademliaConfig {
+impl<TRecord> KademliaConfig<TRecord> {
     /// Sets a custom protocol name.
     ///
     /// Kademlia nodes only communicate with other nodes using the same protocol
@@ -333,9 +333,9 @@ impl KademliaConfig {
     }
 }
 
-impl<TStore> Kademlia<TStore>
+impl<TStore, TRecord: RecordT> Kademlia<TStore, TRecord>
 where
-    for<'a> TStore: RecordStore<'a>
+    for<'a> TStore: RecordStore<'a, TRecord>
 {
     /// Creates a new `Kademlia` network behaviour with a default configuration.
     pub fn new(kp: Keypair, id: PeerId, store: TStore, trust: TrustGraph) -> Self {
@@ -348,7 +348,7 @@ where
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
-    pub fn with_config(kp: Keypair, id: PeerId, store: TStore, config: KademliaConfig, trust: TrustGraph) -> Self {
+    pub fn with_config(kp: Keypair, id: PeerId, store: TStore, config: KademliaConfig<TRecord>, trust: TrustGraph) -> Self {
         let local_key = kbucket::Key::new(id.clone());
 
         let put_record_job = config
@@ -389,7 +389,7 @@ where
     }
 
     /// Gets an iterator over immutable references to all running queries.
-    pub fn iter_queries<'a>(&'a self) -> impl Iterator<Item = QueryRef<'a>> {
+    pub fn iter_queries<'a>(&'a self) -> impl Iterator<Item = QueryRef<'a, TRecord>> {
         self.queries.iter().filter_map(|query|
             if !query.is_finished() {
                 Some(QueryRef { query })
@@ -399,7 +399,7 @@ where
     }
 
     /// Gets an iterator over mutable references to all running queries.
-    pub fn iter_queries_mut<'a>(&'a mut self) -> impl Iterator<Item = QueryMut<'a>> {
+    pub fn iter_queries_mut<'a>(&'a mut self) -> impl Iterator<Item = QueryMut<'a, TRecord>> {
         self.queries.iter_mut().filter_map(|query|
             if !query.is_finished() {
                 Some(QueryMut { query })
@@ -409,7 +409,7 @@ where
     }
 
     /// Gets an immutable reference to a running query, if it exists.
-    pub fn query<'a>(&'a self, id: &QueryId) -> Option<QueryRef<'a>> {
+    pub fn query<'a>(&'a self, id: &QueryId) -> Option<QueryRef<'a, TRecord>> {
         self.queries.get(id).and_then(|query|
             if !query.is_finished() {
                 Some(QueryRef { query })
@@ -419,7 +419,7 @@ where
     }
 
     /// Gets a mutable reference to a running query, if it exists.
-    pub fn query_mut<'a>(&'a mut self, id: &QueryId) -> Option<QueryMut<'a>> {
+    pub fn query_mut<'a>(&'a mut self, id: &QueryId) -> Option<QueryMut<'a, TRecord>> {
         self.queries.get_mut(id).and_then(|query|
             if !query.is_finished() {
                 Some(QueryMut { query })
@@ -584,7 +584,7 @@ where
     ///
     /// The result of this operation is delivered in a
     /// [`KademliaEvent::QueryResult{QueryResult::GetRecord}`].
-    pub fn get_record(&mut self, key: &record::Key, quorum: Quorum) -> QueryId {
+    pub fn get_record(&mut self, key: &TRecord::Key, quorum: Quorum) -> QueryId {
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let mut records = Vec::with_capacity(quorum.get());
 
@@ -629,8 +629,8 @@ where
     /// does not update the record's expiration in local storage, thus a given record
     /// with an explicit expiration will always expire at that instant and until then
     /// is subject to regular (re-)replication and (re-)publication.
-    pub fn put_record(&mut self, mut record: Record, quorum: Quorum) -> Result<QueryId, store::Error> {
-        record.publisher = Some(self.kbuckets.local_key().preimage().clone());
+    pub fn put_record(&mut self, mut record: TRecord, quorum: Quorum) -> Result<QueryId, store::Error> {
+        record.set_publisher(self.kbuckets.local_key().preimage().clone());
         self.store.put(record.clone())?;
         self.metrics.store_put();
         record.expires = record.expires.or_else(||
@@ -659,7 +659,7 @@ where
     /// This is a _local_ operation. However, it also has the effect that
     /// the record will no longer be periodically re-published, allowing the
     /// record to eventually expire throughout the DHT.
-    pub fn remove_record(&mut self, key: &record::Key) {
+    pub fn remove_record(&mut self, key: &TRecord::Key) {
         if let Some(r) = self.store.get(key) {
             if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
                 self.store.remove(key);
@@ -729,7 +729,7 @@ where
     ///
     /// The results of the (repeated) provider announcements sent by this node are
     /// reported via [`KademliaEvent::QueryResult{QueryResult::AddProvider}`].
-    pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
+    pub fn start_providing(&mut self, key: TRecord::Key) -> Result<QueryId, store::Error> {
         self.print_bucket_table();
         // TODO: calculate weight for self?
         let record = ProviderRecord::new(key.clone(), self.kbuckets.local_key().preimage().clone());
@@ -760,7 +760,7 @@ where
     ///
     /// This is a local operation. The local node will still be considered as a
     /// provider for the key by other nodes until these provider records expire.
-    pub fn stop_providing(&mut self, key: &record::Key) {
+    pub fn stop_providing(&mut self, key: &TRecord::Key) {
         let target = kbucket::Key::new(key.clone());
         debug!(
             "stop_providing for key {} ; kademlia key {}",
@@ -774,7 +774,7 @@ where
     ///
     /// The result of this operation is delivered in a
     /// reported via [`KademliaEvent::QueryResult{QueryResult::GetProviders}`].
-    pub fn get_providers(&mut self, key: record::Key) -> QueryId {
+    pub fn get_providers(&mut self, key: TRecord::Key) -> QueryId {
         self.print_bucket_table();
         let info = QueryInfo::GetProviders {
             key: key.clone(),
@@ -792,7 +792,7 @@ where
     }
 
     /// Forces replication of a single record
-    pub fn replicate_record(&mut self, key: record::Key) {
+    pub fn replicate_record(&mut self, key: TRecord::Key) {
         if let Some(rec) = self.store.get(&key).map(|r| r.into_owned()) {
             self.start_put_record(rec, Quorum::All, PutRecordContext::Replicate);
             if let Some(job) = self.put_record_job.as_mut() {
@@ -857,7 +857,7 @@ where
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
-    fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
+    fn provider_peers(&mut self, key: &TRecord::Key, source: &PeerId) -> Vec<KadPeer> {
         let kbuckets = &mut self.kbuckets;
         let mut peers = self.store.providers(key)
             .into_iter()
@@ -888,7 +888,7 @@ where
     }
 
     /// Starts an iterative `ADD_PROVIDER` query for the given key.
-    fn start_add_provider(&mut self, key: record::Key, context: AddProviderContext) {
+    fn start_add_provider(&mut self, key: TRecord::Key, context: AddProviderContext) {
         let provider_key = self.kbuckets.local_public_key();
         let certificates = self.trust.get_all_certs(&provider_key, &[]);
         let info = QueryInfo::AddProvider {
@@ -905,7 +905,7 @@ where
     }
 
     /// Starts an iterative `PUT_VALUE` query for the given record.
-    fn start_put_record(&mut self, record: Record, quorum: Quorum, context: PutRecordContext) {
+    fn start_put_record(&mut self, record: TRecord, quorum: Quorum, context: PutRecordContext) {
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let target = kbucket::Key::new(record.key.clone());
         let peers = Self::closest_keys(&mut self.kbuckets, &target);
@@ -988,7 +988,7 @@ where
         status: NodeStatus,
         connected_peers: &FnvHashSet<PeerId>,
         trust: &TrustGraph
-    ) -> (RoutingUpdate, Vec<NetworkBehaviourAction<KademliaHandlerIn<QueryId>, KademliaEvent>>)
+    ) -> (RoutingUpdate, Vec<NetworkBehaviourAction<KademliaHandlerIn<QueryId, TRecord>, KademliaEvent<TRecord>>>)
     {
         let addresses = contact.addresses.clone();
         let peer = entry.key().preimage().clone();
@@ -1046,8 +1046,8 @@ where
     }
 
     /// Handles a finished (i.e. successful) query.
-    fn query_finished(&mut self, q: Query<QueryInner>, params: &mut impl PollParameters)
-        -> Option<KademliaEvent>
+    fn query_finished(&mut self, q: Query<QueryInner<TRecord>>, params: &mut impl PollParameters)
+                      -> Option<KademliaEvent<TRecord>>
     {
         let query_id = q.id();
         log::trace!("Query {:?} finished.", query_id);
@@ -1282,7 +1282,7 @@ where
                 quorum,
                 phase: PutRecordPhase::PutRecord { success, get_closest_peers_stats }
             } => {
-                let mk_result = |key: record::Key| {
+                let mk_result = |key: TRecord::Key| {
                     if success.len() >= quorum.get() {
                         Ok(PutRecordOk { key })
                     } else {
@@ -1316,7 +1316,7 @@ where
     }
 
     /// Handles a query that timed out.
-    fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<KademliaEvent> {
+    fn query_timeout(&mut self, query: Query<QueryInner<TRecord>>) -> Option<KademliaEvent<TRecord>> {
         let query_id = query.id();
         log::trace!("Query {:?} timed out.", query_id);
         let result = query.into_result();
@@ -1456,9 +1456,9 @@ where
         source: PeerId,
         connection: ConnectionId,
         request_id: KademliaRequestId,
-        mut record: Record
+        mut record: TRecord
     ) {
-        if record.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
+        if record.publisher() == Some(self.kbuckets.local_key().preimage()) {
             // If the (alleged) publisher is the local node, do nothing. The record of
             // the original publisher should never change as a result of replication
             // and the publisher is always assumed to have the "right" value.
@@ -1560,7 +1560,7 @@ where
     }
 
     /// Processes a provider record received from a peer.
-    fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
+    fn provider_received(&mut self, key: TRecord::Key, provider: KadPeer) {
         // Add certificates to trust graph
         let cur_time = trust_graph::current_time();
         for cert in provider.certificates.iter() {
@@ -1658,13 +1658,14 @@ fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
     Duration::from_secs(ttl.as_secs().checked_shr(exp).unwrap_or(0))
 }
 
-impl<TStore> NetworkBehaviour for Kademlia<TStore>
+impl<TStore, TRecord> NetworkBehaviour for Kademlia<TStore, TRecord>
 where
-    for<'a> TStore: RecordStore<'a>,
-    TStore: Send + 'static,
+        for<'a> TStore: RecordStore<'a, TRecord>,
+        TStore: Send + 'static,
+        TRecord: RecordT
 {
-    type ProtocolsHandler = KademliaHandler<QueryId>;
-    type OutEvent = KademliaEvent;
+    type ProtocolsHandler = KademliaHandler<QueryId, TRecord>;
+    type OutEvent = KademliaEvent<TRecord>;
 
     fn new_handler(&mut self) -> Self::ProtocolsHandler {
         KademliaHandler::new(KademliaHandlerConfig {
@@ -1797,7 +1798,7 @@ where
         &mut self,
         source: PeerId,
         connection: ConnectionId,
-        event: KademliaHandlerEvent<QueryId>
+        event: KademliaHandlerEvent<QueryId, TRecord>
     ) {
         self.metrics.received(&event);
         match event {
@@ -1992,7 +1993,7 @@ where
 
     fn poll(&mut self, cx: &mut Context<'_>, parameters: &mut impl PollParameters) -> Poll<
         NetworkBehaviourAction<
-            <KademliaHandler<QueryId> as ProtocolsHandler>::InEvent,
+            <KademliaHandler<QueryId, TRecord> as ProtocolsHandler>::InEvent,
             Self::OutEvent,
         >,
     > {
@@ -2137,11 +2138,11 @@ impl Quorum {
 /// A record either received by the given peer or retrieved from the local
 /// record store.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PeerRecord {
+pub struct PeerRecord<TRecord> {
     /// The peer from whom the record was received. `None` if the record was
     /// retrieved from local storage.
     pub peer: Option<PeerId>,
-    pub record: Record,
+    pub record: TRecord,
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2152,13 +2153,13 @@ pub struct PeerRecord {
 /// See [`NetworkBehaviour::poll`].
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub enum KademliaEvent {
+pub enum KademliaEvent<TRecord: RecordT> {
     /// A query has produced a result.
     QueryResult {
         /// The ID of the query that finished.
         id: QueryId,
         /// The result of the query.
-        result: QueryResult,
+        result: QueryResult<TRecord>,
         /// Execution statistics from the query.
         stats: QueryStats
     },
@@ -2218,7 +2219,7 @@ pub enum KademliaEvent {
 
 /// The results of Kademlia queries.
 #[derive(Debug)]
-pub enum QueryResult {
+pub enum QueryResult<TRecord: RecordT> {
     /// The result of [`Kademlia::bootstrap`].
     Bootstrap(BootstrapResult),
 
@@ -2226,55 +2227,55 @@ pub enum QueryResult {
     GetClosestPeers(GetClosestPeersResult),
 
     /// The result of [`Kademlia::get_providers`].
-    GetProviders(GetProvidersResult),
+    GetProviders(GetProvidersResult<TRecord>),
 
     /// The result of [`Kademlia::start_providing`].
-    StartProviding(AddProviderResult),
+    StartProviding(AddProviderResult<TRecord>),
 
     /// The result of a (automatic) republishing of a provider record.
-    RepublishProvider(AddProviderResult),
+    RepublishProvider(AddProviderResult<TRecord>),
 
     /// The result of [`Kademlia::get_record`].
-    GetRecord(GetRecordResult),
+    GetRecord(GetRecordResult<TRecord>),
 
     /// The result of [`Kademlia::put_record`].
-    PutRecord(PutRecordResult),
+    PutRecord(PutRecordResult<TRecord>),
 
     /// The result of a (automatic) republishing of a (value-)record.
-    RepublishRecord(PutRecordResult),
+    RepublishRecord(PutRecordResult<TRecord>),
 }
 
 /// The result of [`Kademlia::get_record`].
-pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
+pub type GetRecordResult<TRecord> = Result<GetRecordOk<TRecord>, GetRecordError<TRecord>>;
 
 /// The successful result of [`Kademlia::get_record`].
 #[derive(Debug, Clone)]
-pub struct GetRecordOk {
-    pub records: Vec<PeerRecord>
+pub struct GetRecordOk<TRecord> {
+    pub records: Vec<PeerRecord<TRecord>>
 }
 
 /// The error result of [`Kademlia::get_record`].
 #[derive(Debug, Clone)]
-pub enum GetRecordError {
+pub enum GetRecordError<TRecord: RecordT> {
     NotFound {
-        key: record::Key,
+        key: TRecord::Key,
         closest_peers: Vec<PeerId>
     },
     QuorumFailed {
-        key: record::Key,
-        records: Vec<PeerRecord>,
+        key: TRecord::Key,
+        records: Vec<PeerRecord<TRecord>>,
         quorum: NonZeroUsize
     },
     Timeout {
-        key: record::Key,
-        records: Vec<PeerRecord>,
+        key: TRecord::Key,
+        records: Vec<PeerRecord<TRecord>>,
         quorum: NonZeroUsize
     }
 }
 
-impl GetRecordError {
+impl<TRecord: RecordT> GetRecordError<TRecord> {
     /// Gets the key of the record for which the operation failed.
-    pub fn key(&self) -> &record::Key {
+    pub fn key(&self) -> &TRecord::Key {
         match self {
             GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
@@ -2284,7 +2285,7 @@ impl GetRecordError {
 
     /// Extracts the key of the record for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> record::Key {
+    pub fn into_key(self) -> TRecord::Key {
         match self {
             GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
@@ -2294,34 +2295,34 @@ impl GetRecordError {
 }
 
 /// The result of [`Kademlia::put_record`].
-pub type PutRecordResult = Result<PutRecordOk, PutRecordError>;
+pub type PutRecordResult<TRecord: RecordT> = Result<PutRecordOk<TRecord>, PutRecordError<TRecord>>;
 
 /// The successful result of [`Kademlia::put_record`].
 #[derive(Debug, Clone)]
-pub struct PutRecordOk {
-    pub key: record::Key
+pub struct PutRecordOk<TRecord: RecordT> {
+    pub key: TRecord::Key
 }
 
 /// The error result of [`Kademlia::put_record`].
 #[derive(Debug)]
-pub enum PutRecordError {
+pub enum PutRecordError<TRecord: RecordT> {
     QuorumFailed {
-        key: record::Key,
+        key: TRecord::Key,
         /// [`PeerId`]s of the peers the record was successfully stored on.
         success: Vec<PeerId>,
         quorum: NonZeroUsize
     },
     Timeout {
-        key: record::Key,
+        key: TRecord::Key,
         /// [`PeerId`]s of the peers the record was successfully stored on.
         success: Vec<PeerId>,
         quorum: NonZeroUsize
     },
 }
 
-impl PutRecordError {
+impl<TRecord: RecordT> PutRecordError<TRecord> {
     /// Gets the key of the record for which the operation failed.
-    pub fn key(&self) -> &record::Key {
+    pub fn key(&self) -> &TRecord::Key {
         match self {
             PutRecordError::QuorumFailed { key, .. } => key,
             PutRecordError::Timeout { key, .. } => key,
@@ -2330,7 +2331,7 @@ impl PutRecordError {
 
     /// Extracts the key of the record for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> record::Key {
+    pub fn into_key(self) -> TRecord::Key {
         match self {
             PutRecordError::QuorumFailed { key, .. } => key,
             PutRecordError::Timeout { key, .. } => key,
@@ -2394,29 +2395,29 @@ impl GetClosestPeersError {
 }
 
 /// The result of [`Kademlia::get_providers`].
-pub type GetProvidersResult = Result<GetProvidersOk, GetProvidersError>;
+pub type GetProvidersResult<TRecord: RecordT> = Result<GetProvidersOk<TRecord>, GetProvidersError<TRecord>>;
 
 /// The successful result of [`Kademlia::get_providers`].
 #[derive(Debug, Clone)]
-pub struct GetProvidersOk {
-    pub key: record::Key,
+pub struct GetProvidersOk<TRecord: RecordT> {
+    pub key: TRecord::Key,
     pub providers: HashSet<PeerId>,
     pub closest_peers: Vec<PeerId>
 }
 
 /// The error result of [`Kademlia::get_providers`].
 #[derive(Debug, Clone)]
-pub enum GetProvidersError {
+pub enum GetProvidersError<TRecord: RecordT> {
     Timeout {
-        key: record::Key,
+        key: TRecord::Key,
         providers: HashSet<PeerId>,
         closest_peers: Vec<PeerId>
     }
 }
 
-impl GetProvidersError {
+impl<TRecord: RecordT> GetProvidersError<TRecord> {
     /// Gets the key for which the operation failed.
-    pub fn key(&self) -> &record::Key {
+    pub fn key(&self) -> &TRecord::Key {
         match self {
             GetProvidersError::Timeout { key, .. } => key,
         }
@@ -2424,7 +2425,7 @@ impl GetProvidersError {
 
     /// Extracts the key for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> record::Key {
+    pub fn into_key(self) -> TRecord::Key {
         match self {
             GetProvidersError::Timeout { key, .. } => key,
         }
@@ -2432,33 +2433,33 @@ impl GetProvidersError {
 }
 
 /// The result of publishing a provider record.
-pub type AddProviderResult = Result<AddProviderOk, AddProviderError>;
+pub type AddProviderResult<TRecord: RecordT> = Result<AddProviderOk<TRecord>, AddProviderError<TRecord>>;
 
 /// The successful result of publishing a provider record.
 #[derive(Debug, Clone)]
-pub struct AddProviderOk {
-    pub key: record::Key,
+pub struct AddProviderOk<TRecord: RecordT> {
+    pub key: TRecord::Key,
 }
 
 /// The possible errors when publishing a provider record.
 #[derive(Debug)]
-pub enum AddProviderError {
+pub enum AddProviderError<TRecord: RecordT> {
     /// The query timed out.
     Timeout {
-        key: record::Key,
+        key: TRecord::Key,
     },
 }
 
-impl AddProviderError {
+impl<TRecord: RecordT> AddProviderError<TRecord> {
     /// Gets the key for which the operation failed.
-    pub fn key(&self) -> &record::Key {
+    pub fn key(&self) -> &TRecord::Key {
         match self {
             AddProviderError::Timeout { key, .. } => key,
         }
     }
 
     /// Extracts the key for which the operation failed,
-    pub fn into_key(self) -> record::Key {
+    pub fn into_key(self) -> TRecord::Key {
         match self {
             AddProviderError::Timeout { key, .. } => key,
         }
@@ -2500,20 +2501,20 @@ impl From<kbucket::EntryView<kbucket::Key<PeerId>, Contact>> for KadPeer {
 //////////////////////////////////////////////////////////////////////////////
 // Internal query state
 
-struct QueryInner {
+struct QueryInner<TRecord: RecordT> {
     /// The query-specific state.
-    info: QueryInfo,
+    info: QueryInfo<TRecord>,
     /// Contacts of peers discovered during a query.
     contacts: FnvHashMap<PeerId, Contact>,
     /// A map of pending requests to peers.
     ///
     /// A request is pending if the targeted peer is not currently connected
     /// and these requests are sent as soon as a connection to the peer is established.
-    pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn<QueryId>); K_VALUE.get()]>
+    pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn<QueryId, TRecord>); K_VALUE.get()]>
 }
 
-impl QueryInner {
-    fn new(info: QueryInfo) -> Self {
+impl<TRecord: RecordT> QueryInner<TRecord> {
+    fn new(info: QueryInfo<TRecord>) -> Self {
         QueryInner {
             info,
             contacts: Default::default(),
@@ -2540,7 +2541,7 @@ pub enum PutRecordContext {
 
 /// Information about a running query.
 #[derive(Debug, Clone)]
-pub enum QueryInfo {
+pub enum QueryInfo<TRecord: RecordT> {
     /// A query initiated by [`Kademlia::bootstrap`].
     Bootstrap {
         /// The targeted peer ID.
@@ -2560,7 +2561,7 @@ pub enum QueryInfo {
     /// A query initiated by [`Kademlia::get_providers`].
     GetProviders {
         /// The key for which to search for providers.
-        key: record::Key,
+        key: TRecord::Key,
         /// The found providers.
         providers: HashSet<PeerId>,
     },
@@ -2568,7 +2569,7 @@ pub enum QueryInfo {
     /// A (repeated) query initiated by [`Kademlia::start_providing`].
     AddProvider {
         /// The record key.
-        key: record::Key,
+        key: TRecord::Key,
         /// The current phase of the query.
         phase: AddProviderPhase,
         /// The execution context of the query.
@@ -2581,7 +2582,7 @@ pub enum QueryInfo {
 
     /// A (repeated) query initiated by [`Kademlia::put_record`].
     PutRecord {
-        record: Record,
+        record: TRecord,
         /// The expected quorum of responses w.r.t. the replication factor.
         quorum: NonZeroUsize,
         /// The current phase of the query.
@@ -2593,10 +2594,10 @@ pub enum QueryInfo {
     /// A query initiated by [`Kademlia::get_record`].
     GetRecord {
         /// The key to look for.
-        key: record::Key,
+        key: TRecord::Key,
         /// The records with the id of the peer that returned them. `None` when
         /// the record was found in the local store.
-        records: Vec<PeerRecord>,
+        records: Vec<PeerRecord<TRecord>>,
         /// The number of records to look for.
         quorum: NonZeroUsize,
         /// The closest peer to `key` that did not return a record.
@@ -2607,10 +2608,10 @@ pub enum QueryInfo {
     },
 }
 
-impl QueryInfo {
+impl<TRecord: RecordT> QueryInfo<TRecord> {
     /// Creates an event for a handler to issue an outgoing request in the
     /// context of a query.
-    fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId> {
+    fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId, TRecord> {
         match &self {
             QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
                 key: peer.clone().into_bytes(),
@@ -2698,17 +2699,17 @@ pub enum PutRecordPhase {
 }
 
 /// A mutable reference to a running query.
-pub struct QueryMut<'a> {
-    query: &'a mut Query<QueryInner>,
+pub struct QueryMut<'a, TRecord: RecordT> {
+    query: &'a mut Query<QueryInner<TRecord>>,
 }
 
-impl<'a> QueryMut<'a> {
+impl<'a, TRecord: RecordT> QueryMut<'a, TRecord> {
     pub fn id(&self) -> QueryId {
         self.query.id()
     }
 
     /// Gets information about the type and state of the query.
-    pub fn info(&self) -> &QueryInfo {
+    pub fn info(&self) -> &QueryInfo<TRecord> {
         &self.query.inner.info
     }
 
@@ -2728,17 +2729,17 @@ impl<'a> QueryMut<'a> {
 }
 
 /// An immutable reference to a running query.
-pub struct QueryRef<'a> {
-    query: &'a Query<QueryInner>,
+pub struct QueryRef<'a, TRecord: RecordT> {
+    query: &'a Query<QueryInner<TRecord>>,
 }
 
-impl<'a> QueryRef<'a> {
+impl<'a, TRecord: RecordT> QueryRef<'a, TRecord> {
     pub fn id(&self) -> QueryId {
         self.query.id()
     }
 
     /// Gets information about the type and state of the query.
-    pub fn info(&self) -> &QueryInfo {
+    pub fn info(&self) -> &QueryInfo<TRecord> {
         &self.query.inner.info
     }
 

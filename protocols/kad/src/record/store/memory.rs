@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::*;
 
+use super::{Result, RecordStore, ProviderRecord, K_VALUE, RecordT, Error};
 use crate::kbucket;
 use libp2p_core::PeerId;
 use smallvec::SmallVec;
@@ -28,19 +28,19 @@ use std::collections::{hash_map, hash_set, HashMap, HashSet};
 use std::iter;
 
 /// In-memory implementation of a `RecordStore`.
-pub struct MemoryStore {
+pub struct MemoryStore<TRecord: RecordT> {
     /// The identity of the peer owning the store.
     local_key: kbucket::Key<PeerId>,
     /// The configuration of the store.
     config: MemoryStoreConfig,
     /// The stored (regular) records.
-    records: HashMap<Key, Record>,
+    records: HashMap<TRecord::Key, TRecord>,
     /// The stored provider records.
-    providers: HashMap<Key, SmallVec<[ProviderRecord; K_VALUE.get()]>>,
+    providers: HashMap<TRecord::Key, SmallVec<[ProviderRecord<TRecord>; K_VALUE.get()]>>,
     /// The set of all provider records for the node identified by `local_key`.
     ///
     /// Must be kept in sync with `providers`.
-    provided: HashSet<ProviderRecord>,
+    provided: HashSet<ProviderRecord<TRecord>>,
 }
 
 /// Configuration for a `MemoryStore`.
@@ -69,7 +69,7 @@ impl Default for MemoryStoreConfig {
     }
 }
 
-impl MemoryStore {
+impl<TRecord: RecordT> MemoryStore<TRecord> {
     /// Creates a new `MemoryRecordStore` with a default configuration.
     pub fn new(local_id: PeerId) -> Self {
         Self::with_config(local_id, Default::default())
@@ -89,35 +89,35 @@ impl MemoryStore {
     /// Retains the records satisfying a predicate.
     pub fn retain<F>(&mut self, f: F)
     where
-        F: FnMut(&Key, &mut Record) -> bool
+        F: FnMut(&TRecord::Key, &mut TRecord) -> bool
     {
         self.records.retain(f);
     }
 }
 
-impl<'a> RecordStore<'a> for MemoryStore {
+impl<'a, TRecord: RecordT> RecordStore<'a, TRecord> for MemoryStore<TRecord> {
     type RecordsIter = iter::Map<
-        hash_map::Values<'a, Key, Record>,
-        fn(&'a Record) -> Cow<'a, Record>
+        hash_map::Values<'a, TRecord::Key, TRecord>,
+        fn(&'a TRecord) -> Cow<'a, TRecord>
     >;
 
     type ProvidedIter = iter::Map<
-        hash_set::Iter<'a, ProviderRecord>,
-        fn(&'a ProviderRecord) -> Cow<'a, ProviderRecord>
+        hash_set::Iter<'a, ProviderRecord<TRecord>>,
+        fn(&'a ProviderRecord<TRecord>) -> Cow<'a, ProviderRecord<TRecord>>
     >;
 
-    fn get(&'a self, k: &Key) -> Option<Cow<'_, Record>> {
-        self.records.get(k).map(Cow::Borrowed)
+    fn get(&'a self, k: &TRecord::Key) -> Option<Cow<'_, TRecord>> {
+        self.records.get::<TRecord::Key>(k).map(Cow::Borrowed)
     }
 
-    fn put(&'a mut self, r: Record) -> Result<()> {
-        if r.value.len() >= self.config.max_value_bytes {
-            return Err(Error::ValueTooLarge)
-        }
+    fn put(&'a mut self, r: TRecord) -> Result<()> {
+        // if r.value.len() >= self.config.max_value_bytes {
+        //     return Err(Error::ValueTooLarge)
+        // }
 
         let num_records = self.records.len();
 
-        match self.records.entry(r.key.clone()) {
+        match self.records.entry(r.key().clone()) {
             hash_map::Entry::Occupied(mut e) => {
                 e.insert(r);
             }
@@ -132,15 +132,15 @@ impl<'a> RecordStore<'a> for MemoryStore {
         Ok(())
     }
 
-    fn remove(&'a mut self, k: &Key) {
-        self.records.remove(k);
+    fn remove(&'a mut self, k: &TRecord::Key) {
+        self.records.remove::<TRecord::Key>(k);
     }
 
     fn records(&'a self) -> Self::RecordsIter {
         self.records.values().map(Cow::Borrowed)
     }
 
-    fn add_provider(&'a mut self, record: ProviderRecord) -> Result<()> {
+    fn add_provider(&'a mut self, record: ProviderRecord<TRecord>) -> Result<()> {
         let num_keys = self.providers.len();
 
         // Obtain the entry
@@ -190,15 +190,15 @@ impl<'a> RecordStore<'a> for MemoryStore {
         Ok(())
     }
 
-    fn providers(&'a self, key: &Key) -> Vec<ProviderRecord> {
-        self.providers.get(key).map_or_else(Vec::new, |ps| ps.clone().into_vec())
+    fn providers(&'a self, key: &TRecord::Key) -> Vec<ProviderRecord<TRecord>> {
+        self.providers.get::<TRecord::Key>(key).map_or_else(Vec::new, |ps| ps.clone().into_vec())
     }
 
     fn provided(&'a self) -> Self::ProvidedIter {
         self.provided.iter().map(Cow::Borrowed)
     }
 
-    fn remove_provider(&'a mut self, key: &Key, provider: &PeerId) {
+    fn remove_provider(&'a mut self, key: &TRecord::Key, provider: &PeerId) {
         if let hash_map::Entry::Occupied(mut e) = self.providers.entry(key.clone()) {
             let providers = e.get_mut();
             if let Some(i) = providers.iter().position(|p| &p.provider == provider) {
@@ -214,6 +214,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
 
 #[cfg(test)]
 mod tests {
+    use super::super::{Multihash, Record, Key, Instant};
     use super::*;
     use multihash::{wrap, Code};
     use quickcheck::*;
@@ -223,7 +224,7 @@ mod tests {
         wrap(Code::Sha2_256, &rand::thread_rng().gen::<[u8; 32]>())
     }
 
-    fn distance(r: &ProviderRecord) -> kbucket::Distance {
+    fn distance(r: &ProviderRecord<Record>) -> kbucket::Distance {
         kbucket::Key::new(r.key.clone())
             .distance(&kbucket::Key::new(r.provider.clone()))
     }
@@ -242,7 +243,7 @@ mod tests {
 
     #[test]
     fn add_get_remove_provider() {
-        fn prop(r: ProviderRecord) {
+        fn prop(r: ProviderRecord<Record>) {
             let mut store = MemoryStore::new(PeerId::random());
             assert!(store.add_provider(r.clone()).is_ok());
             assert!(store.providers(&r.key).contains(&r));
