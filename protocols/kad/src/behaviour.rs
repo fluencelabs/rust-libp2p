@@ -31,7 +31,7 @@ use crate::jobs::*;
 use crate::kbucket::{self, KBucketsTable, NodeStatus, KBucketRef, KeyBytes};
 use crate::protocol::{KademliaProtocolConfig, KadConnectionType, KadPeer};
 use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState, WeightedPeer};
-use crate::record::{self, store::{self, RecordStore}, ProviderRecord, RecordT};
+use crate::record::{store::{self, RecordStore}, ProviderRecord, RecordT};
 use crate::contact::Contact;
 use fnv::{FnvHashMap, FnvHashSet};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId, multiaddr};
@@ -633,10 +633,11 @@ where
         record.set_publisher(self.kbuckets.local_key().preimage().clone());
         self.store.put(record.clone())?;
         self.metrics.store_put();
-        record.expires = record.expires.or_else(||
-            self.record_ttl.map(|ttl| Instant::now() + ttl));
+        if let Some(ttl) = self.record_ttl {
+            record.init_expiration(Instant::now() + ttl);
+        }
         let quorum = quorum.eval(self.queries.config().replication_factor);
-        let target = kbucket::Key::new(record.key.clone());
+        let target = kbucket::Key::new(record.key().clone());
 
         let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let context = PutRecordContext::Publish;
@@ -661,7 +662,7 @@ where
     /// record to eventually expire throughout the DHT.
     pub fn remove_record(&mut self, key: &TRecord::Key) {
         if let Some(r) = self.store.get(key) {
-            if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
+            if r.publisher() == Some(self.kbuckets.local_key().preimage()) {
                 self.store.remove(key);
                 self.metrics.record_removed();
             }
@@ -907,7 +908,7 @@ where
     /// Starts an iterative `PUT_VALUE` query for the given record.
     fn start_put_record(&mut self, record: TRecord, quorum: Quorum, context: PutRecordContext) {
         let quorum = quorum.eval(self.queries.config().replication_factor);
-        let target = kbucket::Key::new(record.key.clone());
+        let target = kbucket::Key::new(record.key().clone());
         let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let info = QueryInfo::PutRecord {
             record, quorum, context, phase: PutRecordPhase::GetClosestPeers
@@ -1294,20 +1295,20 @@ where
                         Some(KademliaEvent::QueryResult {
                             id: query_id,
                             stats: get_closest_peers_stats.merge(result.stats),
-                            result: QueryResult::PutRecord(mk_result(record.key))
+                            result: QueryResult::PutRecord(mk_result(record.key().clone()))
                         }),
                     PutRecordContext::Republish =>
                         Some(KademliaEvent::QueryResult {
                             id: query_id,
                             stats: get_closest_peers_stats.merge(result.stats),
-                            result: QueryResult::RepublishRecord(mk_result(record.key))
+                            result: QueryResult::RepublishRecord(mk_result(record.key().clone()))
                         }),
                     PutRecordContext::Replicate => {
-                        debug!("Record replicated: {:?}", record.key);
+                        debug!("Record replicated: {:?}", record.key());
                         None
                     }
                     PutRecordContext::Cache => {
-                        debug!("Record cached: {:?}", record.key);
+                        debug!("Record cached: {:?}", record.key());
                         None
                     }
                 }
@@ -1381,7 +1382,7 @@ where
 
             QueryInfo::PutRecord { record, quorum, context, phase } => {
                 let err = Err(PutRecordError::Timeout {
-                    key: record.key,
+                    key: record.into_key(),
                     quorum,
                     success: match phase {
                         PutRecordPhase::GetClosestPeers => vec![],
@@ -1466,8 +1467,7 @@ where
                 peer_id: source,
                 handler: NotifyHandler::One(connection),
                 event: KademliaHandlerIn::PutRecordRes {
-                    key: record.key,
-                    value: record.value,
+                    record,
                     request_id,
                 },
             });
@@ -1480,14 +1480,15 @@ where
         // number of nodes between the local node and the closest node to the key
         // (beyond the replication factor). This ensures avoiding over-caching
         // outside of the k closest nodes to a key.
-        let target = kbucket::Key::new(record.key.clone());
+        let target = kbucket::Key::new(record.key().clone());
         let num_between = self.kbuckets.count_nodes_between(&target);
         let k = self.queries.config().replication_factor.get();
         let num_beyond_k = (usize::max(k, num_between) - k) as u32;
-        let expiration = self.record_ttl.map(|ttl| now + exp_decrease(ttl, num_beyond_k));
         // The smaller TTL prevails. Only if neither TTL is set is the record
         // stored "forever".
-        record.expires = record.expires.or(expiration).min(expiration);
+        if let Some(ttl) = self.record_ttl {
+            record.shorten_expiration(now + exp_decrease(ttl, num_beyond_k))
+        }
 
         if let Some(job) = self.put_record_job.as_mut() {
             // Ignore the record in the next run of the replication
@@ -1495,7 +1496,7 @@ where
             // record to the k closest peers. Effectively, only
             // one of the k closest peers performs a replication
             // in the configured interval, assuming a shared interval.
-            job.skip(record.key.clone())
+            job.skip(record.key().clone())
         }
 
         // While records received from a publisher, as well as records that do
@@ -1514,7 +1515,7 @@ where
             match self.store.put(record.clone()) {
                 Ok(()) => {
                     self.metrics.store_put();
-                    debug!("Record stored: {:?}; {} bytes", record.key, record.value.len());
+                    debug!("Record stored: {:?}", record.key());
                 },
                 Err(e) => {
                     info!("Record not stored: {:?}", e);
@@ -1540,8 +1541,7 @@ where
             peer_id: source,
             handler: NotifyHandler::One(connection),
             event: KademliaHandlerIn::PutRecordRes {
-                key: record.key,
-                value: record.value,
+                record,
                 request_id,
             },
         })
@@ -2021,7 +2021,7 @@ where
             let num = usize::min(JOBS_MAX_NEW_QUERIES, jobs_query_capacity);
             for _ in 0 .. num {
                 if let Poll::Ready(r) = job.poll(cx, &mut self.store, now) {
-                    let context = if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
+                    let context = if r.publisher() == Some(self.kbuckets.local_key().preimage()) {
                         PutRecordContext::Republish
                     } else {
                         PutRecordContext::Replicate
@@ -2295,7 +2295,7 @@ impl<TRecord: RecordT> GetRecordError<TRecord> {
 }
 
 /// The result of [`Kademlia::put_record`].
-pub type PutRecordResult<TRecord: RecordT> = Result<PutRecordOk<TRecord>, PutRecordError<TRecord>>;
+pub type PutRecordResult<TRecord> = Result<PutRecordOk<TRecord>, PutRecordError<TRecord>>;
 
 /// The successful result of [`Kademlia::put_record`].
 #[derive(Debug, Clone)]
@@ -2395,7 +2395,7 @@ impl GetClosestPeersError {
 }
 
 /// The result of [`Kademlia::get_providers`].
-pub type GetProvidersResult<TRecord: RecordT> = Result<GetProvidersOk<TRecord>, GetProvidersError<TRecord>>;
+pub type GetProvidersResult<TRecord> = Result<GetProvidersOk<TRecord>, GetProvidersError<TRecord>>;
 
 /// The successful result of [`Kademlia::get_providers`].
 #[derive(Debug, Clone)]
@@ -2433,7 +2433,7 @@ impl<TRecord: RecordT> GetProvidersError<TRecord> {
 }
 
 /// The result of publishing a provider record.
-pub type AddProviderResult<TRecord: RecordT> = Result<AddProviderOk<TRecord>, AddProviderError<TRecord>>;
+pub type AddProviderResult<TRecord> = Result<AddProviderOk<TRecord>, AddProviderError<TRecord>>;
 
 /// The successful result of publishing a provider record.
 #[derive(Debug, Clone)]
@@ -2627,7 +2627,7 @@ impl<TRecord: RecordT> QueryInfo<TRecord> {
             },
             QueryInfo::AddProvider { key, phase, provider_key, certificates, .. } => match phase {
                 AddProviderPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
-                    key: key.to_vec(),
+                    key: key.as_ref().to_vec(),
                     user_data: query_id,
                 },
                 AddProviderPhase::AddProvider {
@@ -2653,7 +2653,7 @@ impl<TRecord: RecordT> QueryInfo<TRecord> {
             },
             QueryInfo::PutRecord { record, phase, .. } => match phase {
                 PutRecordPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
-                    key: record.key.to_vec(),
+                    key: record.key().as_ref().to_vec(),
                     user_data: query_id,
                 },
                 PutRecordPhase::PutRecord { .. } => KademliaHandlerIn::PutRecord {

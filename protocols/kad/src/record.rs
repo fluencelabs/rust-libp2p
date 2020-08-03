@@ -34,11 +34,16 @@ use std::time::Duration;
 use std::io;
 use std::fmt::Debug;
 
-pub trait RecordT: Eq+ Send + Clone + Debug + Into<proto::Record> + TryFrom<proto::Record, Error = io::Error> + 'static {
-    type Key: Clone + Send + AsRef<[u8]> + Borrow<[u8]> + From<Vec<u8>> + Hash + Eq;
+pub trait RecordT: Eq + Send + Clone + Debug + Into<proto::Record> + TryFrom<proto::Record, Error = io::Error> + 'static {
+    type Key: Clone + Send + Debug + AsRef<[u8]> + Borrow<[u8]> + From<Vec<u8>> + Hash + Eq;
 
     fn key(&self) -> &Self::Key;
+    fn into_key(self) -> Self::Key;
+
     fn is_expired(&self, now: Instant) -> bool;
+    fn init_expiration(&mut self, expire_on: Instant);
+    fn shorten_expiration(&mut self, short: Instant);
+
     fn publisher(&self) -> Option<&PeerId>;
     fn set_publisher(&mut self, publisher: PeerId);
 }
@@ -50,8 +55,23 @@ impl RecordT for Record {
         &self.key
     }
 
+    fn into_key(self) -> Self::Key {
+        self.key
+    }
+
     fn is_expired(&self, now: Instant) -> bool {
         self.is_expired(now)
+    }
+
+    fn init_expiration(&mut self, expire_on: Instant) {
+        if self.expires.is_none() {
+            self.expires = Some(expire_on);
+        }
+    }
+
+    /// Set `expires` to minimum of `expires` and `short`
+    fn shorten_expiration(&mut self, short: Instant) {
+        self.expires = Some(self.expires.unwrap_or(short).min(short));
     }
 
     fn publisher(&self) -> Option<&PeerId> {

@@ -29,7 +29,7 @@
 use bytes::BytesMut;
 use codec::UviBytes;
 use crate::dht_proto as proto;
-use crate::record::{self, Record, RecordT};
+use crate::record::RecordT;
 use futures::prelude::*;
 use futures_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
@@ -38,7 +38,6 @@ use prost::Message;
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
 use unsigned_varint::codec;
-use wasm_timer::Instant;
 
 use derivative::Derivative;
 use libp2p_core::identity::ed25519::PublicKey;
@@ -299,10 +298,10 @@ where
 }
 
 /// Sink of responses and stream of requests.
-pub type KadInStreamSink<S, TRecord: RecordT> = KadStreamSink<S, KadResponseMsg<TRecord>, KadRequestMsg<TRecord>>;
+pub type KadInStreamSink<S, TRecord> = KadStreamSink<S, KadResponseMsg<TRecord>, KadRequestMsg<TRecord>>;
 
 /// Sink of requests and stream of responses.
-pub type KadOutStreamSink<S, TRecord: RecordT> = KadStreamSink<S, KadRequestMsg<TRecord>, KadResponseMsg<TRecord>>;
+pub type KadOutStreamSink<S, TRecord> = KadStreamSink<S, KadRequestMsg<TRecord>, KadResponseMsg<TRecord>>;
 
 pub type KadStreamSink<S, A, B> = stream::AndThen<
     sink::With<
@@ -386,10 +385,8 @@ pub enum KadResponseMsg<TRecord: RecordT> {
 
     /// Response to a `PutValue`.
     PutValue {
-        /// The key of the record.
-        key: TRecord::Key,
-        /// Value of the record.
-        value: Vec<u8>,
+        /// Record that saved (TODO: why return it in response?)
+        record: TRecord
     },
 }
 
@@ -460,14 +457,10 @@ fn resp_msg_to_proto<TRecord: RecordT>(kad_msg: KadResponseMsg<TRecord>) -> prot
             record: record.map(|r| r.into()),
             .. proto::Message::default()
         },
-        KadResponseMsg::PutValue { key, value } => proto::Message {
+        KadResponseMsg::PutValue { record } => proto::Message {
             r#type: proto::message::MessageType::PutValue as i32,
-            key: key.as_ref().to_vec(),
-            record: Some(proto::Record {
-                key: key.as_ref().to_vec(),
-                value,
-                .. proto::Record::default()
-            }),
+            key: record.key().as_ref().to_vec(),
+            record: Some(record.into()),
             .. proto::Message::default()
         }
     }
@@ -561,14 +554,12 @@ fn proto_to_resp_msg<TRecord: RecordT>(message: proto::Message) -> Result<KadRes
         }
 
         proto::message::MessageType::PutValue => {
-            let key = TRecord::Key::from(message.key);
-            let rec = message.record.ok_or_else(|| {
+            let rec = TRecord::try_from(message.record.ok_or_else(|| {
                 invalid_data("received PutValue message with no record")
-            })?;
+            })?)?;
 
             Ok(KadResponseMsg::PutValue {
-                key,
-                value: rec.value
+                record: rec
             })
         }
 

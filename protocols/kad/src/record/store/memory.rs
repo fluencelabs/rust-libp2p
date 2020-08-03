@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn provided() {
         let id = PeerId::random();
-        let mut store = MemoryStore::new(id.clone());
+        let mut store = MemoryStore::<Record>::new(id.clone());
         let key = random_multihash();
         let rec = ProviderRecord::new(key, id.clone());
         assert!(store.add_provider(rec.clone()).is_ok());
@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn update_provider() {
-        let mut store = MemoryStore::new(PeerId::random());
+        let mut store = MemoryStore::<Record>::new(PeerId::random());
         let key = random_multihash();
         let prv = PeerId::random();
         let mut rec = ProviderRecord::new(key, prv);
@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn max_provided_keys() {
-        let mut store = MemoryStore::new(PeerId::random());
+        let mut store = MemoryStore::<Record>::new(PeerId::random());
         for _ in 0 .. store.config.max_provided_keys {
             let key = random_multihash();
             let prv = PeerId::random();

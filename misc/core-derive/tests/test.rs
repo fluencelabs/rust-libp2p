@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_core_derive::*;
+use libp2p::kad::Record;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
@@ -83,7 +84,7 @@ fn three_fields() {
     struct Foo {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
-        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
+        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore<Record>, Record>,
         #[behaviour(ignore)]
         foo: String,
     }
@@ -98,8 +99,8 @@ fn three_fields() {
         }
     }
 
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {
+    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent<Record>> for Foo {
+        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent<Record>) {
         }
     }
 
@@ -117,7 +118,7 @@ fn three_fields_non_last_ignored() {
         ping: libp2p::ping::Ping,
         #[behaviour(ignore)]
         identify: String,
-        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
+        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore<Record>, Record>,
     }
 
     impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
@@ -125,8 +126,8 @@ fn three_fields_non_last_ignored() {
         }
     }
 
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {
+    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent<Record>> for Foo {
+        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent<Record>) {
         }
     }
 
@@ -291,7 +292,7 @@ fn event_process_false() {
         identify: libp2p::identify::Identify,
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, unreachable_code, unused_variables)]
     fn bar() {
         require_net_behaviour::<Foo>();
 

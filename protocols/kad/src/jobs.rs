@@ -61,7 +61,7 @@
 //! > to the size of all stored records. As a job runs, the records are moved
 //! > out of the job to the consumer, where they can be dropped after being sent.
 
-use crate::record::{self, Record, ProviderRecord, store::RecordStore, RecordT};
+use crate::record::{ProviderRecord, store::RecordStore, RecordT};
 use libp2p_core::PeerId;
 use futures::prelude::*;
 use std::collections::HashSet;
@@ -190,7 +190,7 @@ impl<TRecord: RecordT> PutRecordJob<TRecord> {
     /// Must be called in the context of a task. When `NotReady` is returned,
     /// the current task is registered to be notified when the job is ready
     /// to be run.
-    pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<Record>
+    pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<TRecord>
     where
         for<'a> T: RecordStore<'a, TRecord>
     {
@@ -198,14 +198,15 @@ impl<TRecord: RecordT> PutRecordJob<TRecord> {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
             let records = store.records()
                 .filter_map(|r| {
-                    let is_publisher = r.publisher.as_ref() == Some(&self.local_id);
-                    if self.skipped.contains(&r.key) || (!publish && is_publisher) {
+                    let is_publisher = r.publisher() == Some(&self.local_id);
+                    if self.skipped.contains::<TRecord::Key>(r.key()) || (!publish && is_publisher) {
                         None
                     } else {
                         let mut record = r.into_owned();
                         if publish && is_publisher {
-                            record.expires = record.expires.or_else(||
-                                self.record_ttl.map(|ttl| now + ttl));
+                            if let Some(ttl) = self.record_ttl {
+                                record.init_expiration(now + ttl);
+                            }
                         }
                         Some(record)
                     }
@@ -227,7 +228,7 @@ impl<TRecord: RecordT> PutRecordJob<TRecord> {
             loop {
                 if let Some(r) = records.next() {
                     if r.is_expired(now) {
-                        store.remove(&r.key)
+                        store.remove(&r.key())
                     } else {
                         return Poll::Ready(r)
                     }
@@ -330,6 +331,7 @@ mod tests {
     use quickcheck::*;
     use rand::Rng;
     use super::*;
+    use crate::Record;
 
     fn rand_put_record_job() -> PutRecordJob<Record> {
         let mut rng = rand::thread_rng();

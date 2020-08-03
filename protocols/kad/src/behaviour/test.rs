@@ -22,7 +22,7 @@
 
 use super::*;
 
-use crate::K_VALUE;
+use crate::{K_VALUE, record};
 use crate::kbucket::Distance;
 use crate::record::{Key, store::MemoryStore, Record};
 use futures::{
@@ -415,7 +415,7 @@ fn get_record_not_found() {
     // Drop the swarm addresses.
     let mut swarms = swarms.into_iter().map(|(_, _addr, swarm)| swarm).collect::<Vec<_>>();
 
-    let target_key = record::Key::from(random_multihash());
+    let target_key = Key::from(random_multihash());
     let qid = swarms[0].get_record(&target_key, Quorum::One);
 
     block_on(
@@ -933,7 +933,7 @@ fn exp_decr_expiration_overflow() {
     }
 
     // Right shifting a u64 by >63 results in a panic.
-    prop_no_panic(KademliaConfig::default().record_ttl.unwrap(), 64);
+    prop_no_panic(KademliaConfig::<Record>::default().record_ttl.unwrap(), 64);
 
     quickcheck(prop_no_panic as fn(_, _))
 }

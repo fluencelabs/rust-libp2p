@@ -22,7 +22,7 @@ use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
 };
-use crate::record::{self, RecordT};
+use crate::record::RecordT;
 use futures::prelude::*;
 use libp2p_swarm::{
     NegotiatedSubstream,
@@ -214,10 +214,8 @@ pub enum KademliaHandlerEvent<TUserData, TRecord: RecordT> {
 
     /// Response to a request to store a record.
     PutRecordRes {
-        /// The key of the stored record.
-        key: TRecord::Key,
-        /// The value of the stored record.
-        value: Vec<u8>,
+        /// Record that saved (TODO: why return it in response?)
+        record: TRecord,
         /// The user data passed to the `PutValue`.
         user_data: TUserData,
     }
@@ -357,10 +355,8 @@ pub enum KademliaHandlerIn<TUserData, TRecord: RecordT> {
 
     /// Response to a `PutRecord`.
     PutRecordRes {
-        /// Key of the value that was put.
-        key: TRecord::Key,
-        /// Value that was put.
-        value: Vec<u8>,
+        /// Saved record
+        record: TRecord,
         /// Identifier of the request that was made by the remote.
         request_id: KademliaRequestId,
     }
@@ -562,9 +558,8 @@ where
                 }
             }
             KademliaHandlerIn::PutRecordRes {
-                key,
                 request_id,
-                value,
+                record
             } => {
                 let pos = self.substreams.iter().position(|state| match state {
                     SubstreamState::InWaitingUser(ref conn_id, _)
@@ -582,8 +577,7 @@ where
                     };
 
                     let msg = KadResponseMsg::PutValue {
-                        key,
-                        value,
+                        record
                     };
                     self.substreams
                         .push(SubstreamState::InPendingSend(conn_id, substream, msg));
@@ -955,10 +949,9 @@ fn process_kad_response<TUserData, TRecord: RecordT>(
             closer_peers,
             user_data,
         },
-        KadResponseMsg::PutValue { key, value, .. } => {
+        KadResponseMsg::PutValue { record } => {
             KademliaHandlerEvent::PutRecordRes {
-                key,
-                value,
+                record,
                 user_data,
             }
         }
