@@ -111,9 +111,9 @@ impl<'a, TRecord: RecordT> RecordStore<'a, TRecord> for MemoryStore<TRecord> {
     }
 
     fn put(&'a mut self, r: TRecord) -> Result<()> {
-        // if r.value.len() >= self.config.max_value_bytes {
-        //     return Err(Error::ValueTooLarge)
-        // }
+        if r.size() >= self.config.max_value_bytes {
+            return Err(Error::ValueTooLarge)
+        }
 
         let num_records = self.records.len();
 

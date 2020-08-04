@@ -37,6 +37,8 @@ use std::fmt::Debug;
 pub trait RecordT: Eq + Send + Clone + Debug + Into<proto::Record> + TryFrom<proto::Record, Error = io::Error> + 'static {
     type Key: Clone + Send + Debug + AsRef<[u8]> + Borrow<[u8]> + From<Vec<u8>> + Hash + Eq;
 
+    fn size(&self) -> usize;
+
     fn key(&self) -> &Self::Key;
     fn into_key(self) -> Self::Key;
 
@@ -50,6 +52,10 @@ pub trait RecordT: Eq + Send + Clone + Debug + Into<proto::Record> + TryFrom<pro
 
 impl RecordT for Record {
     type Key = Key;
+
+    fn size(&self) -> usize {
+        self.value.len()
+    }
 
     fn key(&self) -> &Self::Key {
         &self.key
