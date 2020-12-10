@@ -212,6 +212,7 @@ impl<TInner> QueryPool<TInner> {
                 }
                 PeersIterState::Waiting(None) | PeersIterState::WaitingAtCapacity => {
                     let elapsed = now - query.stats.start.unwrap_or(now);
+                    log::debug!("Query {} timed out after {} of {} has passed", elapsed, self.config.timeout);
                     if elapsed >= self.config.timeout {
                         timeout = Some(query_id);
                         break

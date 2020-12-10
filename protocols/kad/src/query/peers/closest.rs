@@ -335,9 +335,10 @@ impl ClosestPeersIter {
                         // closest peers, the iterator is done.
                         if *cnt >= self.config.num_results.get() {
                             trace!(
-                                "ClosestPeerIter: target = {}; {} peers responded, finished.",
+                                "ClosestPeerIter: target = {}; {}/ХЪ peers responded, finished.",
                                 bs58::encode(&self.target).into_string(),
-                                *cnt
+                                *cnt,
+                                self.config.num_results.get()
                             );
                             self.state = State::Finished;
                             return PeersIterState::Finished
