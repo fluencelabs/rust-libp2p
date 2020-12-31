@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use async_std::task;
-use libp2p::mdns::service::{MdnsPacket, MdnsService};
+use fluence_fork_libp2p::mdns::service::{MdnsPacket, MdnsService};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {

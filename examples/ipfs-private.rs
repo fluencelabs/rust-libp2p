@@ -31,6 +31,9 @@
 //!
 //! You can ping this node, or use pubsub (gossipsub) on the topic "chat". For this
 //! to work, the ipfs node needs to be configured to use gossipsub.
+
+use fluence_fork_libp2p as libp2p;
+
 use async_std::{io, task};
 use futures::{future, prelude::*};
 use libp2p::{

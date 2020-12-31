@@ -46,6 +46,8 @@
 //!
 //! The two nodes should then connect.
 
+use fluence_fork_libp2p as libp2p;
+
 use async_std::{io, task};
 use env_logger::{Builder, Env};
 use futures::prelude::*;

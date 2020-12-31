@@ -29,6 +29,8 @@
 //!
 //! 4. Close with Ctrl-c.
 
+use fluence_fork_libp2p as libp2p;
+
 use async_std::{io, task};
 use futures::prelude::*;
 use libp2p::kad::record::store::MemoryStore;
