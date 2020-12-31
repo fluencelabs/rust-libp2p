@@ -20,6 +20,7 @@
 
 use libp2p_core::{muxing, upgrade, Transport};
 use libp2p_tcp::TcpConfig;
+use fluence_fork_libp2p_mplex as libp2p_mplex;
 use futures::{channel::oneshot, prelude::*};
 use std::sync::Arc;
 

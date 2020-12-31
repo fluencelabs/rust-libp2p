@@ -38,7 +38,7 @@ use libp2p_core::{
     transport::MemoryTransport,
     upgrade,
 };
-use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
+use fluence_fork_libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;

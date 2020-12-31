@@ -28,7 +28,7 @@ use libp2p_core::{
     transport::{Transport, boxed::Boxed},
     upgrade
 };
-use libp2p_ping::*;
+use fluence_fork_libp2p_ping::*;
 use libp2p_secio::SecioConfig;
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;

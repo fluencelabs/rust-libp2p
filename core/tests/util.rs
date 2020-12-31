@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 
 use futures::prelude::*;
-use libp2p_core::{
+use fluence_fork_libp2p_core::{
     Multiaddr,
     connection::{
         ConnectionHandler,

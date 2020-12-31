@@ -20,7 +20,7 @@
 
 use futures::{future, prelude::*};
 use libp2p_core::{transport::Transport, upgrade};
-use libp2p_deflate::DeflateConfig;
+use fluence_fork_libp2p_deflate::DeflateConfig;
 use libp2p_tcp::TcpConfig;
 use quickcheck::{QuickCheck, RngCore, TestResult};
 

@@ -30,7 +30,7 @@ use libp2p_core::{
     upgrade::{self, read_one, write_one}
 };
 use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
-use libp2p_request_response::*;
+use fluence_fork_libp2p_request_response::*;
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use futures::{prelude::*, channel::mpsc};
