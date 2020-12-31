@@ -1,7 +1,6 @@
 
 use data_encoding::HEXUPPER;
 use multihash::Multihash;
-use parity_multiaddr::*;
 use quickcheck::{Arbitrary, Gen, QuickCheck};
 use rand::Rng;
 use std::{
@@ -11,6 +10,8 @@ use std::{
     net::{Ipv4Addr, Ipv6Addr},
     str::FromStr
 };
+
+use fluence_fork_parity_multiaddr::*;
 
 // Property tests
 
