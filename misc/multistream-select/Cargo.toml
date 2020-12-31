@@ -1,5 +1,5 @@
 [package]
-name = "multistream-select"
+name = "fluence-fork-multistream-select"
 description = "Multistream-select negotiation protocol for libp2p"
 version = "0.8.2"
 authors = ["Parity Technologies <admin@parity.io>"]

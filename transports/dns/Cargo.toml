@@ -1,5 +1,5 @@
 [package]
-name = "libp2p-dns"
+name = "fluence-fork-libp2p-dns"
 edition = "2018"
 description = "DNS transport implementation for libp2p"
 version = "0.20.0"
@@ -10,7 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.20.0", path = "../../core" }
+libp2p-core = { version = "0.20.0", path = "../../core", package = "fluence-fork-libp2p-core" }
 log = "0.4.1"
 futures = "0.3.1"
 
