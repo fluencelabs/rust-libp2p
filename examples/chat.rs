@@ -49,7 +49,7 @@
 //!
 //! The two nodes then connect.
 
-use fluence_fork_libp2p as libp2p;
+extern crate fluence_fork_libp2p as libp2p;
 
 use async_std::{io, task};
 use futures::{future, prelude::*};

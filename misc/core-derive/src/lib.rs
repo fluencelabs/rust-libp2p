@@ -45,20 +45,20 @@ fn build(ast: &DeriveInput) -> TokenStream {
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
-    let multiaddr = quote!{::fluence_fork_libp2p::core::Multiaddr};
-    let trait_to_impl = quote!{::fluence_fork_libp2p::swarm::NetworkBehaviour};
-    let net_behv_event_proc = quote!{::fluence_fork_libp2p::swarm::NetworkBehaviourEventProcess};
-    let either_ident = quote!{::fluence_fork_libp2p::core::either::EitherOutput};
-    let network_behaviour_action = quote!{::fluence_fork_libp2p::swarm::NetworkBehaviourAction};
-    let into_protocols_handler = quote!{::fluence_fork_libp2p::swarm::IntoProtocolsHandler};
-    let protocols_handler = quote!{::fluence_fork_libp2p::swarm::ProtocolsHandler};
-    let into_proto_select_ident = quote!{::fluence_fork_libp2p::swarm::IntoProtocolsHandlerSelect};
-    let peer_id = quote!{::fluence_fork_libp2p::core::PeerId};
-    let connection_id = quote!{::fluence_fork_libp2p::core::connection::ConnectionId};
-    let connected_point = quote!{::fluence_fork_libp2p::core::ConnectedPoint};
-    let listener_id = quote!{::fluence_fork_libp2p::core::connection::ListenerId};
+    let multiaddr = quote!{::libp2p::core::Multiaddr};
+    let trait_to_impl = quote!{::libp2p::swarm::NetworkBehaviour};
+    let net_behv_event_proc = quote!{::libp2p::swarm::NetworkBehaviourEventProcess};
+    let either_ident = quote!{::libp2p::core::either::EitherOutput};
+    let network_behaviour_action = quote!{::libp2p::swarm::NetworkBehaviourAction};
+    let into_protocols_handler = quote!{::libp2p::swarm::IntoProtocolsHandler};
+    let protocols_handler = quote!{::libp2p::swarm::ProtocolsHandler};
+    let into_proto_select_ident = quote!{::libp2p::swarm::IntoProtocolsHandlerSelect};
+    let peer_id = quote!{::libp2p::core::PeerId};
+    let connection_id = quote!{::libp2p::core::connection::ConnectionId};
+    let connected_point = quote!{::libp2p::core::ConnectedPoint};
+    let listener_id = quote!{::libp2p::core::connection::ListenerId};
 
-    let poll_parameters = quote!{::fluence_fork_libp2p::swarm::PollParameters};
+    let poll_parameters = quote!{::libp2p::swarm::PollParameters};
 
     // Build the generics.
     let impl_generics = {
