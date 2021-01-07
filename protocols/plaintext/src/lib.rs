@@ -57,6 +57,7 @@ mod structs_proto {
 /// > Builder pattern one can still do an upgrade *manually*:
 ///
 /// ```
+/// # extern crate fluence_fork_libp2p_plaintext as libp2p_plaintext;
 /// # use libp2p_core::transport::{ Transport, memory::MemoryTransport };
 /// # use libp2p_plaintext::PlainText1Config;
 /// #

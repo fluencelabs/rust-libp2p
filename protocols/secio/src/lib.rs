@@ -28,6 +28,8 @@
 //! See [`authenticate`](libp2p_core::transport::upgrade::Builder::authenticate).
 //!
 //! ```no_run
+//! extern crate fluence_fork_libp2p_secio as libp2p_secio;
+//!
 //! # fn main() {
 //! use futures::prelude::*;
 //! use libp2p_secio::{SecioConfig, SecioOutput};

@@ -76,6 +76,7 @@
 //! For a dialer:
 //!
 //! ```no_run
+//! # extern crate fluence_fork_multistream_select as multistream_select;
 //! # fn main() {
 //! use async_std::net::TcpStream;
 //! use multistream_select::{dialer_select_proto, Version};

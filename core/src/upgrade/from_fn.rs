@@ -28,6 +28,7 @@ use std::iter;
 /// # Example
 ///
 /// ```
+/// # extern crate fluence_fork_libp2p_core as libp2p_core;
 /// # use libp2p_core::transport::{Transport, MemoryTransport};
 /// # use libp2p_core::upgrade;
 /// # use std::io;

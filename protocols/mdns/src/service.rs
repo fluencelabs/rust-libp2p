@@ -59,6 +59,7 @@ lazy_static! {
 /// # Example
 ///
 /// ```rust
+/// # extern crate fluence_fork_libp2p_mdns as libp2p_mdns;
 /// # use futures::prelude::*;
 /// # use futures::executor::block_on;
 /// # use libp2p_core::{identity, Multiaddr, PeerId};

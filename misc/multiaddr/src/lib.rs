@@ -1,5 +1,7 @@
 ///! Implementation of [multiaddr](https://github.com/jbenet/multiaddr) in Rust.
 
+extern crate self as parity_multiaddr;
+
 pub use multihash;
 
 mod protocol;
@@ -65,6 +67,7 @@ impl Multiaddr {
     /// # Examples
     ///
     /// ```
+    /// # extern crate fluence_fork_parity_multiaddr as parity_multiaddr;
     /// use parity_multiaddr::{Multiaddr, Protocol};
     ///
     /// let mut address: Multiaddr = "/ip4/127.0.0.1".parse().unwrap();
@@ -80,6 +83,7 @@ impl Multiaddr {
 
     /// Pops the last `Protocol` of this multiaddr, or `None` if the multiaddr is empty.
     /// ```
+    /// # extern crate fluence_fork_parity_multiaddr as parity_multiaddr;
     /// use parity_multiaddr::{Multiaddr, Protocol};
     ///
     /// let mut address: Multiaddr = "/ip4/127.0.0.1/udt/sctp/5678".parse().unwrap();
@@ -118,6 +122,7 @@ impl Multiaddr {
     /// # Example
     ///
     /// ```rust
+    /// # extern crate fluence_fork_parity_multiaddr as parity_multiaddr;
     /// use std::net::Ipv4Addr;
     /// use parity_multiaddr::{Multiaddr, Protocol};
     ///
@@ -178,6 +183,8 @@ impl fmt::Display for Multiaddr {
     /// # Example
     ///
     /// ```
+    /// # extern crate fluence_fork_parity_multiaddr as parity_multiaddr;
+    ///
     /// use parity_multiaddr::Multiaddr;
     ///
     /// let address: Multiaddr = "/ip4/127.0.0.1/udt".parse().unwrap();
@@ -388,6 +395,7 @@ impl<'de> Deserialize<'de> for Multiaddr {
 /// Example:
 ///
 /// ```rust
+/// # extern crate fluence_fork_parity_multiaddr as parity_multiaddr;
 /// # use parity_multiaddr::multiaddr;
 /// let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(10500u16));
 /// ```

@@ -41,6 +41,7 @@ use std::{collections::VecDeque, fmt, pin::Pin};
 /// # Example
 ///
 /// ```no_run
+/// # extern crate fluence_fork_libp2p_core as libp2p_core;
 /// # fn main() {
 /// use futures::prelude::*;
 /// use libp2p_core::connection::{ListenersEvent, ListenersStream};

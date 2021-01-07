@@ -97,6 +97,7 @@ pub use self::{
 /// # Example
 ///
 /// ```
+/// # extern crate fluence_fork_libp2p_core as libp2p_core;
 /// use libp2p_core::ProtocolName;
 ///
 /// enum MyProtocolName {

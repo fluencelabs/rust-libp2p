@@ -39,6 +39,7 @@
 //! Example:
 //!
 //! ```
+//! # extern crate fluence_fork_libp2p_noise as libp2p_noise;
 //! use libp2p_core::{identity, Transport, upgrade};
 //! use libp2p_tcp::TcpConfig;
 //! use libp2p_noise::{Keypair, X25519Spec, NoiseConfig};
