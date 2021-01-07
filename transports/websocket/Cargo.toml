@@ -9,6 +9,9 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_websocket"
+
 [dependencies]
 async-tls = "0.8.0"
 either = "1.5.3"

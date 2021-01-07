@@ -7,6 +7,9 @@ license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 edition = "2018"
 
+[lib]
+name = "libp2p_noise"
+
 [dependencies]
 bytes = "0.5"
 curve25519-dalek = "2.0.0"

@@ -10,6 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [lib]
+name = "libp2p_core_derive"
 proc-macro = true
 
 [dependencies]

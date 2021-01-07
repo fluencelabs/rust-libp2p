@@ -8,6 +8,9 @@ keywords = ["multiaddr", "ipfs"]
 license = "MIT"
 version = "0.9.1"
 
+[lib]
+name = "parity_multiaddr"
+
 [dependencies]
 arrayref = "0.3"
 bs58 = "0.3.0"

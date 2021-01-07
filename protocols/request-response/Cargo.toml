@@ -9,6 +9,9 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
+[lib]
+name = "libp2p_request_response"
+
 [dependencies]
 async-trait = "0.1"
 futures = "0.3.1"
