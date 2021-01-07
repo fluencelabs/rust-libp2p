@@ -1,3 +1,4 @@
+extern crate fluence_fork_parity_multiaddr as parity_multiaddr;
 
 use data_encoding::HEXUPPER;
 use multihash::Multihash;
@@ -11,7 +12,7 @@ use std::{
     str::FromStr
 };
 
-use fluence_fork_parity_multiaddr::*;
+use parity_multiaddr::*;
 
 // Property tests
 

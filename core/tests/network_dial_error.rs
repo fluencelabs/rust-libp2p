@@ -20,7 +20,7 @@
 
 mod util;
 
-use fluence_fork_libp2p_core as libp2p_core;
+extern crate fluence_fork_libp2p_core as libp2p_core;
 
 use futures::prelude::*;
 use libp2p_core::identity;

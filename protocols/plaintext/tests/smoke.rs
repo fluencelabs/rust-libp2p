@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+extern crate fluence_fork_libp2p_plaintext as libp2p_plaintext;
+
 use futures::io::{AsyncWriteExt, AsyncReadExt};
 use futures::stream::TryStreamExt;
 use libp2p_core::{
@@ -26,7 +28,7 @@ use libp2p_core::{
     transport::{Transport, ListenerEvent},
     upgrade,
 };
-use fluence_fork_libp2p_plaintext::PlainText2Config;
+use libp2p_plaintext::PlainText2Config;
 use log::debug;
 use quickcheck::QuickCheck;
 

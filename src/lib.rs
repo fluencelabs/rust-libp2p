@@ -47,6 +47,8 @@
 //! Example (Dialing a TCP/IP multi-address):
 //!
 //! ```rust
+//! extern crate fluence_fork_libp2p as libp2p;
+//!
 //! use libp2p::{Multiaddr, Transport, tcp::TcpConfig};
 //! let tcp = TcpConfig::new();
 //! let addr: Multiaddr = "/ip4/98.97.96.95/tcp/20500".parse().expect("invalid multiaddr");
@@ -64,6 +66,8 @@
 //! Example (Creating a development transport):
 //!
 //! ```rust
+//! extern crate fluence_fork_libp2p as libp2p;
+//!
 //! let keypair = libp2p::identity::Keypair::generate_ed25519();
 //! let _transport = libp2p::build_development_transport(keypair);
 //! // _transport.dial(...);
@@ -85,6 +89,8 @@
 //! Example ([`secio`] + [`yamux`] Protocol Upgrade):
 //!
 //! ```rust
+//! extern crate fluence_fork_libp2p as libp2p;
+//!
 //! # #[cfg(all(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")), feature = "tcp-async-std", feature = "secio", feature = "yamux"))] {
 //! use libp2p::{Transport, core::upgrade, tcp::TcpConfig, secio::SecioConfig, identity::Keypair, yamux};
 //! let tcp = TcpConfig::new();

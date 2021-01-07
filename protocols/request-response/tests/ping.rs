@@ -20,6 +20,8 @@
 
 //! Integration tests for the `RequestResponse` network behaviour.
 
+extern crate fluence_fork_libp2p_request_response as libp2p_request_response;
+
 use async_trait::async_trait;
 use libp2p_core::{
     Multiaddr,
@@ -30,7 +32,7 @@ use libp2p_core::{
     upgrade::{self, read_one, write_one}
 };
 use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
-use fluence_fork_libp2p_request_response::*;
+use libp2p_request_response::*;
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;
 use futures::{prelude::*, channel::mpsc};

@@ -18,9 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+extern crate fluence_fork_libp2p_deflate as libp2p_deflate;
+
 use futures::{future, prelude::*};
 use libp2p_core::{transport::Transport, upgrade};
-use fluence_fork_libp2p_deflate::DeflateConfig;
+use libp2p_deflate::DeflateConfig;
 use libp2p_tcp::TcpConfig;
 use quickcheck::{QuickCheck, RngCore, TestResult};
 

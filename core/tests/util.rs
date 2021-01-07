@@ -1,8 +1,10 @@
 
 #![allow(dead_code)]
 
+extern crate fluence_fork_libp2p_core as libp2p_core;
+
 use futures::prelude::*;
-use fluence_fork_libp2p_core::{
+use libp2p_core::{
     Multiaddr,
     connection::{
         ConnectionHandler,

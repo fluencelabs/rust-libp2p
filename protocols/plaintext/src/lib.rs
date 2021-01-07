@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+extern crate self as libp2p_plaintext;
+
 use crate::error::PlainTextError;
 use crate::handshake::Remote;
 

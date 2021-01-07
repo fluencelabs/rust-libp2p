@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+extern crate fluence_fork_libp2p_gossipsub as libp2p_gossipsub;
+
 use futures::prelude::*;
 use log::debug;
 use quickcheck::{QuickCheck, TestResult};
@@ -38,7 +40,7 @@ use libp2p_core::{
     transport::MemoryTransport,
     upgrade,
 };
-use fluence_fork_libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
+use libp2p_gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, Topic};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::Swarm;
 use libp2p_yamux as yamux;

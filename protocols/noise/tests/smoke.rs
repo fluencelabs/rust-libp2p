@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use fluence_fork_libp2p_noise as libp2p_noise;
+extern crate fluence_fork_libp2p_noise as libp2p_noise;
 
 use futures::{future::{self, Either}, prelude::*};
 use libp2p_core::identity;

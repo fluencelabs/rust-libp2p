@@ -20,6 +20,8 @@
 
 //! Integration tests for the `Ping` network behaviour.
 
+extern crate fluence_fork_libp2p_ping as libp2p_ping;
+
 use libp2p_core::{
     Multiaddr,
     PeerId,
@@ -28,7 +30,7 @@ use libp2p_core::{
     transport::{Transport, boxed::Boxed},
     upgrade
 };
-use fluence_fork_libp2p_ping::*;
+use libp2p_ping::*;
 use libp2p_secio::SecioConfig;
 use libp2p_swarm::Swarm;
 use libp2p_tcp::TcpConfig;

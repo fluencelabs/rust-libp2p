@@ -38,7 +38,7 @@
 //! The two nodes establish a connection, negotiate the ping protocol
 //! and begin pinging each other.
 
-use fluence_fork_libp2p as libp2p;
+extern crate fluence_fork_libp2p as libp2p;
 
 use async_std::task;
 use futures::{future, prelude::*};

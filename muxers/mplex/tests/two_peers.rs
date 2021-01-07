@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+extern crate fluence_fork_libp2p_mplex as libp2p_mplex;
+
 use libp2p_core::{muxing, upgrade, Transport};
 use libp2p_tcp::TcpConfig;
-use fluence_fork_libp2p_mplex as libp2p_mplex;
 use futures::{channel::oneshot, prelude::*};
 use std::sync::Arc;
 

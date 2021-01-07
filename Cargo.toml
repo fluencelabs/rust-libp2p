@@ -130,8 +130,7 @@ members = [
 ##       visible via dependency mechanics (i.e., not visible HERE)
 [patch.crates-io]
 libp2p-core = { package = "fluence-fork-libp2p-core", path = "core" }
-
-# required to wasm compilation
+# required for wasm compilation
 # adds saturating_duration_since methods
 wasm-timer = { git = "https://github.com/fluencelabs/wasm-timer", branch = "saturating_duration_since" }
 

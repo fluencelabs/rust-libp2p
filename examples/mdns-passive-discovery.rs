@@ -18,8 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+extern crate fluence_fork_libp2p as libp2p;
+
 use async_std::task;
-use fluence_fork_libp2p::mdns::service::{MdnsPacket, MdnsService};
+use libp2p::mdns::service::{MdnsPacket, MdnsService};
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
