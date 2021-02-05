@@ -28,7 +28,7 @@ libp2p-noise = { path = "../../protocols/noise", package = "fluence-fork-libp2p-
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 
 [build-dependencies]
-prost-build = "0.6"
+prost-build = "0.7"
 
 
 [package.metadata.workspaces]
