@@ -49,7 +49,7 @@ libp2p-mplex = { path = "../muxers/mplex", package = "fluence-fork-libp2p-mplex"
 libp2p-noise = { path = "../protocols/noise", package = "fluence-fork-libp2p-noise" }
 libp2p-tcp = { path = "../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 multihash = { version = "0.13", default-features = false, features = ["arb"] }
-quickcheck = "0.9.0"
+quickcheck = "1.0.3"
 wasm-timer = "0.2"
 
 [build-dependencies]

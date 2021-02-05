@@ -31,7 +31,7 @@ env_logger = "0.8"
 futures = "0.3"
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
 libp2p-plaintext = { path = "../../protocols/plaintext", package = "fluence-fork-libp2p-plaintext" }
-quickcheck = "0.9"
+quickcheck = "1.0"
 rand = "0.7"
 
 [[bench]]
