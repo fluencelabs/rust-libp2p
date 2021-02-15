@@ -2,7 +2,7 @@
 name = "fluence-fork-libp2p-kad"
 edition = "2018"
 description = "Kademlia protocol for libp2p"
-version = "0.27.0"
+version = "0.27.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -20,15 +20,15 @@ fnv = "1.0"
 futures_codec = "0.4"
 futures = "0.3.1"
 log = "0.4"
-libp2p-core = { version = "0.26.0", path = "../../core", package = "fluence-fork-libp2p-core" }
-libp2p-swarm = { version = "0.26.0", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
+libp2p-core = { version = "0.26.1", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-swarm = { version = "0.26.1", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
 prost = "0.6.1"
 rand = "0.7.2"
 sha2 = "0.9.1"
 smallvec = "1.0"
 wasm-timer = "0.2"
 uint = "0.8"
-unsigned-varint = { version = "0.5", features = ["futures-codec"] }
+unsigned-varint = { version = "0.7", features = ["futures-codec"] }
 void = "1.0"
 bs58 = "0.3.0"
 derivative = "2.0.2"
