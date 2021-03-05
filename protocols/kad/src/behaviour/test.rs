@@ -172,6 +172,7 @@ fn bootstrap() {
         ).into_iter()
             .map(|(_, _a, s)| s)
             .collect::<Vec<_>>();
+
         let swarm_ids: Vec<_> = swarms.iter()
             .map(Swarm::local_peer_id)
             .cloned()
@@ -477,7 +478,7 @@ fn put_record() {
             // Connect `single_swarm` to three bootnodes.
             for i in 0..3 {
                 single_swarm.2.add_address(
-                    Swarm::local_peer_id(&fully_connected_swarms[0].2),
+                    &Swarm::local_peer_id(&fully_connected_swarms[0].2),
                 fully_connected_swarms[i].1.clone(),
                     fully_connected_swarms[i].0.public(),
                 );
@@ -758,7 +759,7 @@ fn add_provider() {
             // Connect `single_swarm` to three bootnodes.
             for i in 0..3 {
                 single_swarm.2.add_address(
-                    Swarm::local_peer_id(&fully_connected_swarms[0].2),
+                    &Swarm::local_peer_id(&fully_connected_swarms[0].2),
                 fully_connected_swarms[i].1.clone(),
                     fully_connected_swarms[i].0.public(),
                 );
@@ -960,8 +961,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     trudy.2.store.put(record_trudy.clone()).unwrap();
 
     // Make `trudy` and `bob` known to `alice`.
-    alice.2.add_address(Swarm::local_peer_id(&trudy.2), trudy.1.clone(), trudy.0.public());
-    alice.2.add_address(Swarm::local_peer_id(&bob.2), bob.1.clone(), bob.0.public());
+    alice.2.add_address(&Swarm::local_peer_id(&trudy.2), trudy.1.clone(), trudy.0.public());
+    alice.2.add_address(&Swarm::local_peer_id(&bob.2), bob.1.clone(), bob.0.public());
 
     // Drop the swarm addresses.
     let (mut alice, mut bob, mut trudy) = (alice.2, bob.2, trudy.2);

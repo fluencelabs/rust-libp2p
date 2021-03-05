@@ -1,4 +1,17 @@
-# 0.9.0 [unreleased]
+# 0.10.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
+# 0.9.1 [2021-02-15]
+
+- Make `is_pending_outbound` return true on pending connection.
+  [PR 1928](https://github.com/libp2p/rust-libp2p/pull/1928).
+
+- Update dependencies.
+
+# 0.9.0 [2021-01-12]
+
+- Update dependencies.
 
 - Re-export `throttled`-specific response channel. [PR
   1902](https://github.com/libp2p/rust-libp2p/pull/1902).
@@ -59,4 +72,3 @@ https://github.com/libp2p/rust-libp2p/pull/1606).
 # 0.1.0
 
 - Initial release.
-

@@ -1,3 +1,21 @@
+# 0.29.0 [unreleased]
+
+- Update `libp2p-swarm`.
+
+# 0.28.0 [2021-02-15]
+
+- Prevent non-published messages being added to caches.
+  [PR 1930](https://github.com/libp2p/rust-libp2p/pull/1930)
+
+- Update dependencies.
+
+# 0.27.0 [2021-01-12]
+
+- Update dependencies.
+
+- Implement Gossipsub v1.1 specification.
+  [PR 1720](https://github.com/libp2p/rust-libp2p/pull/1720)
+
 # 0.26.0 [2020-12-17]
 
 - Update `libp2p-swarm` and `libp2p-core`.

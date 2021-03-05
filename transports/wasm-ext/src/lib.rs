@@ -206,6 +206,10 @@ impl Transport for ExtTransport {
             inner: SendWrapper::new(promise.into()),
         })
     }
+
+    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
+        None
+    }
 }
 
 /// Future that dial a remote through an external transport.
@@ -480,11 +484,7 @@ impl Drop for Connection {
 /// Returns true if `err` is an error about an address not being supported.
 fn is_not_supported_error(err: &JsValue) -> bool {
     if let Some(err) = err.dyn_ref::<js_sys::Error>() {
-        if String::from(err.name()) == "NotSupportedError" {
-            true
-        } else {
-            false
-        }
+        err.name() == "NotSupportedError"
     } else {
         false
     }
