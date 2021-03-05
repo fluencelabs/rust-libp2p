@@ -14,8 +14,8 @@ name = "libp2p_identify"
 
 [dependencies]
 futures = "0.3.1"
-libp2p-core = { version = "0.27.1", path = "../../core", package = "fluence-fork-libp2p-core" }
-libp2p-swarm = { version = "0.28.1", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
+libp2p-core = { version = "0.27.0", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-swarm = { version = "0.28.0", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
 log = "0.4.1"
 prost = "0.7"
 smallvec = "1.0"
