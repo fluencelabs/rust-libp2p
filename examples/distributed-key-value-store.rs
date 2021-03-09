@@ -64,7 +64,7 @@ use libp2p::{
     swarm::NetworkBehaviourEventProcess
 };
 use std::{error::Error, task::{Context, Poll}};
-use trust_graph::TrustGraph;
+use trust_graph::{TrustGraph, InMemoryStorage};
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -159,7 +159,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             libp2p::identity::Keypair::Ed25519(kp) => kp,
             _ => unreachable!("only ed25519 supported"),
         };
-        let kademlia = Kademlia::new(local_key, local_peer_id.clone(), store, TrustGraph::new(vec![]));
+        let trust = {
+            let storage = InMemoryStorage::new_in_memory(vec![]);
+            TrustGraph::new(storage)
+        };
+        let kademlia = Kademlia::new(local_key, local_peer_id.clone(), store, trust);
         let mdns = task::block_on(Mdns::new(MdnsConfig::default()))?;
         let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::new(transport, behaviour, local_peer_id)

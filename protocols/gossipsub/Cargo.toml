@@ -14,7 +14,7 @@ name = "libp2p_gossipsub"
 
 [dependencies]
 libp2p-swarm = { version = "0.28.0", path = "../../swarm", package = "fluence-fork-libp2p-swarm" }
-libp2p-core = { version = "0.27.0", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-core = { version = "0.27.1", path = "../../core", package = "fluence-fork-libp2p-core" }
 bytes = "1.0"
 byteorder = "1.3.4"
 fnv = "1.0.7"

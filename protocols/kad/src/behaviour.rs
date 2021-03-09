@@ -58,11 +58,13 @@ use std::task::{Context, Poll};
 use std::vec;
 use wasm_timer::Instant;
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
-use trust_graph::{TrustGraph, Certificate};
+use trust_graph::{Certificate};
 use derivative::Derivative;
 use crate::metrics::Metrics;
 
 pub use crate::query::QueryStats;
+
+type TrustGraph = trust_graph::TrustGraph<trust_graph::InMemoryStorage>;
 
 /// `Kademlia` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
@@ -766,7 +768,7 @@ where
             bs58::encode(target.as_ref()).into_string(), // sha256
         );
         let provider_key = self.kbuckets.local_public_key();
-        let certificates = self.trust.get_all_certs(&provider_key, &[]);
+        let certificates = self.get_certificates(&provider_key);
         let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let context = AddProviderContext::Publish;
         let info = QueryInfo::AddProvider {
@@ -849,13 +851,12 @@ where
         if let Some(query) = self.queries.get_mut(query_id) {
             log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
             for peer in others_iter.clone() {
-                log::trace!("Peer {:?} reported by {:?} in query {:?}.",
-                            peer, source, query_id);
+                log::trace!("Peer {:?} reported by {:?} in query {:?}.", peer, source, query_id);
                 query.inner.contacts.insert(peer.node_id, peer.clone().into());
             }
             query.on_success(source, others_iter.map(|kp| WeightedPeer {
                 peer_id: kp.node_id.clone().into(),
-                weight: trust.weight(&kp.public_key).unwrap_or_default()
+                weight: get_weight(trust, &kp.public_key),
             }))
         }
     }
@@ -874,7 +875,7 @@ where
                 .map(KadPeer::from)
                 .collect();
             peers.iter_mut().for_each(|mut peer|
-                peer.certificates = self.trust.get_all_certs(&peer.public_key, &[])
+                peer.certificates = self.get_certificates(&peer.public_key)
             );
             peers
         }
@@ -907,14 +908,12 @@ where
                         // The provider is either the local node and we fill in
                         // the local addresses on demand,
                         let self_key = kbuckets.local_public_key();
-                        let certificates = trust.get_all_certs(&self_key, &[]);
-                        let multiaddrs = local_addrs.iter().cloned().collect::<Vec<_>>();
                         Some(KadPeer {
-                            public_key: self_key,
                             node_id,
-                            multiaddrs,
                             connection_ty,
-                            certificates
+                            multiaddrs: local_addrs.iter().cloned().collect::<Vec<_>>(),
+                            certificates: get_certificates(&trust, &self_key),
+                            public_key: self_key,
                         })
                     } else {
                         let key = kbucket::Key::from(node_id);
@@ -927,16 +926,16 @@ where
                             } else {
                                 p.addresses
                             };
-                            let certificates = node_id.as_public_key().and_then(|provider_pk|
-                                match provider_pk {
-                                    libp2p_core::identity::PublicKey::Ed25519(pk) =>
-                                        Some(trust.get_all_certs(pk, &[])),
+                            let certificates = {
+                                match node_id.as_public_key() {
+                                    Some(libp2p_core::identity::PublicKey::Ed25519(pk)) =>
+                                        get_certificates(&trust, &pk),
                                     key => {
                                         log::warn!("Provider {} has a non-Ed25519 public key: {:?}", node_id, key);
-                                        None
+                                        vec![]
                                     }
                                 }
-                            ).unwrap_or_default();
+                            };
 
                             KadPeer {
                                 node_id,
@@ -969,7 +968,7 @@ where
     /// Starts an iterative `ADD_PROVIDER` query for the given key.
     fn start_add_provider(&mut self, key: record::Key, context: AddProviderContext) {
         let provider_key = self.kbuckets.local_public_key();
-        let certificates = self.trust.get_all_certs(&provider_key, &[]);
+        let certificates = self.get_certificates(&provider_key);
         let info = QueryInfo::AddProvider {
             context,
             key: key.clone(),
@@ -1071,7 +1070,7 @@ where
     {
         let addresses = contact.addresses.clone();
         let peer = entry.key().preimage().clone();
-        let weight = trust.weight(contact.public_key.clone()).unwrap_or(0);
+        let weight = get_weight(&trust, &contact.public_key);
         debug!(
             "Calculated weight for {} pk {}: {}",
             entry.key().preimage(),
@@ -1223,7 +1222,7 @@ where
                 let provider_id = *params.local_peer_id();
                 let external_addresses = params.external_addresses().map(|r| r.addr).collect();
                 let provider_key = self.kbuckets.local_public_key();
-                let certificates = self.trust.get_all_certs(&provider_key, &[]);
+                let certificates = self.get_certificates(&provider_key);
                 let inner = QueryInner::new(QueryInfo::AddProvider {
                     context,
                     key,
@@ -1240,7 +1239,7 @@ where
                 let peers = result.peers.into_iter().map(|peer_id| {
                     let weight = contacts
                         .get(&peer_id)
-                        .and_then(|c| trust.weight(&c.public_key))
+                        .map(|c| get_weight(&trust, &c.public_key))
                         .unwrap_or_default();
                     WeightedPeer {
                         peer_id: peer_id.into(),
@@ -1298,7 +1297,8 @@ where
                         let trust = &self.trust;
                         let weight =
                             result.inner.contacts.get(peer_id)
-                                .and_then(|c| trust.weight(&c.public_key)).unwrap_or_default();
+                                .map(|c| get_weight(&trust, &c.public_key))
+                                .unwrap_or_default();
                         let peer = WeightedPeer {
                             weight,
                             peer_id: cache_key
@@ -1341,9 +1341,10 @@ where
                 let trust = &self.trust;
                 let peers = result.peers.into_iter().map(|peer_id| {
                     let weight =
-                        contacts.get(&peer_id).and_then(|c|
-                            trust.weight(&c.public_key)
-                        ).unwrap_or_default();
+                        contacts
+                            .get(&peer_id)
+                            .map(|c| get_weight(&trust, &c.public_key))
+                            .unwrap_or_default();
 
                     WeightedPeer {
                         peer_id: peer_id.into(),
@@ -1737,6 +1738,26 @@ where
             log!("\n{}", buckets);
         }
     }
+
+    fn get_certificates(&self, key: &PublicKey) -> Vec<Certificate> {
+        get_certificates(&self.trust, key)
+    }
+
+    fn get_weight(&self, key: &PublicKey) -> u32 {
+        get_weight(&self.trust, key)
+    }
+}
+
+fn get_certificates(trust: &TrustGraph, key: &PublicKey) -> Vec<Certificate> {
+    fluence_identity::PublicKey::from_libp2p(&key).map(|key|
+        trust.get_all_certs(&key, &[]).unwrap_or_default()
+    ).unwrap_or_default()
+}
+
+fn get_weight(trust: &TrustGraph, key: &PublicKey) -> u32 {
+    fluence_identity::PublicKey::from_libp2p(&key).map(|key|
+        trust.weight(&key).unwrap_or_default().unwrap_or_default()
+    ).unwrap_or(0)
 }
 
 /// Exponentially decrease the given duration (base 2).

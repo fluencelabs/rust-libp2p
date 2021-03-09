@@ -16,7 +16,7 @@ name = "libp2p_websocket"
 futures-rustls = "0.21"
 either = "1.5.3"
 futures = "0.3.1"
-libp2p-core = { version = "0.27.0", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-core = { version = "0.27.1", path = "../../core", package = "fluence-fork-libp2p-core" }
 log = "0.4.8"
 quicksink = "0.1"
 rw-stream-sink = "0.2.0"
