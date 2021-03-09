@@ -58,11 +58,13 @@ use std::task::{Context, Poll};
 use std::vec;
 use wasm_timer::Instant;
 use libp2p_core::identity::ed25519::{Keypair, PublicKey};
-use trust_graph::{TrustGraph, Certificate};
+use trust_graph::{Certificate};
 use derivative::Derivative;
 use crate::metrics::Metrics;
 
 pub use crate::query::QueryStats;
+
+type TrustGraph = trust_graph::TrustGraph<trust_graph::InMemoryStorage>;
 
 /// `Kademlia` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
@@ -363,7 +365,7 @@ where
             .record_replication_interval
             .or(config.record_publication_interval)
             .map(|interval| PutRecordJob::new(
-                id.clone(),
+                id,
                 interval,
                 config.record_publication_interval,
                 config.record_ttl,
@@ -398,7 +400,7 @@ where
     }
 
     /// Gets an iterator over immutable references to all running queries.
-    pub fn iter_queries<'a>(&'a self) -> impl Iterator<Item = QueryRef<'a>> {
+    pub fn iter_queries(&self) -> impl Iterator<Item = QueryRef<'_>> {
         self.queries.iter().filter_map(|query|
             if !query.is_finished() {
                 Some(QueryRef { query })
@@ -408,7 +410,7 @@ where
     }
 
     /// Gets an iterator over mutable references to all running queries.
-    pub fn iter_queries_mut<'a>(&'a mut self) -> impl Iterator<Item = QueryMut<'a>> {
+    pub fn iter_queries_mut(&mut self) -> impl Iterator<Item = QueryMut<'_>> {
         self.queries.iter_mut().filter_map(|query|
             if !query.is_finished() {
                 Some(QueryMut { query })
@@ -418,7 +420,7 @@ where
     }
 
     /// Gets an immutable reference to a running query, if it exists.
-    pub fn query<'a>(&'a self, id: &QueryId) -> Option<QueryRef<'a>> {
+    pub fn query(&self, id: &QueryId) -> Option<QueryRef<'_>> {
         self.queries.get(id).and_then(|query|
             if !query.is_finished() {
                 Some(QueryRef { query })
@@ -461,7 +463,7 @@ where
                 if entry.value().insert(address) {
                     self.queued_events.push_back(NetworkBehaviourAction::GenerateEvent(
                         KademliaEvent::RoutingUpdated {
-                            peer: peer.clone(),
+                            peer: *peer,
                             addresses: entry.value().clone().into(),
                             old_peer: None,
                         }
@@ -647,7 +649,7 @@ where
     /// with an explicit expiration will always expire at that instant and until then
     /// is subject to regular (re-)replication and (re-)publication.
     pub fn put_record(&mut self, mut record: Record, quorum: Quorum) -> Result<QueryId, store::Error> {
-        record.publisher = Some(self.kbuckets.local_key().preimage().clone());
+        record.publisher = Some(*self.kbuckets.local_key().preimage());
         self.store.put(record.clone())?;
         self.metrics.store_put();
         record.expires = record.expires.or_else(||
@@ -712,7 +714,7 @@ where
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
-            peer: local_key.preimage().clone(),
+            peer: *local_key.preimage(),
             remaining: None
         };
         let peers = Self::closest_keys(&mut self.kbuckets, &local_key).collect::<Vec<_>>();
@@ -756,7 +758,7 @@ where
         // TODO: calculate weight for self?
         let record = ProviderRecord::new(
             key.clone(),
-            self.kbuckets.local_key().preimage().clone(),
+            *self.kbuckets.local_key().preimage(),
             local_addrs);
         self.store.add_provider(record)?;
         let target = kbucket::Key::new(key.clone());
@@ -766,7 +768,7 @@ where
             bs58::encode(target.as_ref()).into_string(), // sha256
         );
         let provider_key = self.kbuckets.local_public_key();
-        let certificates = self.trust.get_all_certs(&provider_key, &[]);
+        let certificates = self.get_certificates(&provider_key);
         let peers = Self::closest_keys(&mut self.kbuckets, &target);
         let context = AddProviderContext::Publish;
         let info = QueryInfo::AddProvider {
@@ -843,20 +845,18 @@ where
             }
         }
 
-        let local_id = self.kbuckets.local_key().preimage().clone();
-        let others_iter = peers.filter(|p| p.node_id != local_id);
+        let local_id = self.kbuckets.local_key().preimage();
+        let others_iter = peers.filter(|p| &p.node_id != local_id);
         let trust = &self.trust;
-
         if let Some(query) = self.queries.get_mut(query_id) {
             log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
             for peer in others_iter.clone() {
-                log::trace!("Peer {:?} reported by {:?} in query {:?}.",
-                            peer, source, query_id);
-                query.inner.contacts.insert(peer.node_id.clone(), peer.clone().into());
+                log::trace!("Peer {:?} reported by {:?} in query {:?}.", peer, source, query_id);
+                query.inner.contacts.insert(peer.node_id, peer.clone().into());
             }
             query.on_success(source, others_iter.map(|kp| WeightedPeer {
                 peer_id: kp.node_id.clone().into(),
-                weight: trust.weight(&kp.public_key).unwrap_or_default()
+                weight: get_weight(trust, &kp.public_key),
             }))
         }
     }
@@ -875,7 +875,7 @@ where
                 .map(KadPeer::from)
                 .collect();
             peers.iter_mut().for_each(|mut peer|
-                peer.certificates = self.trust.get_all_certs(&peer.public_key, &[])
+                peer.certificates = self.get_certificates(&peer.public_key)
             );
             peers
         }
@@ -908,14 +908,12 @@ where
                         // The provider is either the local node and we fill in
                         // the local addresses on demand,
                         let self_key = kbuckets.local_public_key();
-                        let certificates = trust.get_all_certs(&self_key, &[]);
-                        let multiaddrs = local_addrs.iter().cloned().collect::<Vec<_>>();
                         Some(KadPeer {
-                            public_key: self_key,
                             node_id,
-                            multiaddrs,
                             connection_ty,
-                            certificates
+                            multiaddrs: local_addrs.iter().cloned().collect::<Vec<_>>(),
+                            certificates: get_certificates(&trust, &self_key),
+                            public_key: self_key,
                         })
                     } else {
                         let key = kbucket::Key::from(node_id);
@@ -928,16 +926,16 @@ where
                             } else {
                                 p.addresses
                             };
-                            let certificates = node_id.as_public_key().and_then(|provider_pk|
-                                match provider_pk {
-                                    libp2p_core::identity::PublicKey::Ed25519(pk) =>
-                                        Some(trust.get_all_certs(pk, &[])),
+                            let certificates = {
+                                match node_id.as_public_key() {
+                                    Some(libp2p_core::identity::PublicKey::Ed25519(pk)) =>
+                                        get_certificates(&trust, &pk),
                                     key => {
                                         log::warn!("Provider {} has a non-Ed25519 public key: {:?}", node_id, key);
-                                        None
+                                        vec![]
                                     }
                                 }
-                            ).unwrap_or_default();
+                            };
 
                             KadPeer {
                                 node_id,
@@ -970,7 +968,7 @@ where
     /// Starts an iterative `ADD_PROVIDER` query for the given key.
     fn start_add_provider(&mut self, key: record::Key, context: AddProviderContext) {
         let provider_key = self.kbuckets.local_public_key();
-        let certificates = self.trust.get_all_certs(&provider_key, &[]);
+        let certificates = self.get_certificates(&provider_key);
         let info = QueryInfo::AddProvider {
             context,
             key: key.clone(),
@@ -1072,7 +1070,7 @@ where
     {
         let addresses = contact.addresses.clone();
         let peer = entry.key().preimage().clone();
-        let weight = trust.weight(contact.public_key.clone()).unwrap_or(0);
+        let weight = get_weight(&trust, &contact.public_key);
         debug!(
             "Calculated weight for {} pk {}: {}",
             entry.key().preimage(),
@@ -1221,10 +1219,10 @@ where
                 phase: AddProviderPhase::GetClosestPeers,
                 ..
             } => {
-                let provider_id = params.local_peer_id().clone();
+                let provider_id = *params.local_peer_id();
                 let external_addresses = params.external_addresses().map(|r| r.addr).collect();
                 let provider_key = self.kbuckets.local_public_key();
-                let certificates = self.trust.get_all_certs(&provider_key, &[]);
+                let certificates = self.get_certificates(&provider_key);
                 let inner = QueryInner::new(QueryInfo::AddProvider {
                     context,
                     key,
@@ -1241,7 +1239,7 @@ where
                 let peers = result.peers.into_iter().map(|peer_id| {
                     let weight = contacts
                         .get(&peer_id)
-                        .and_then(|c| trust.weight(&c.public_key))
+                        .map(|c| get_weight(&trust, &c.public_key))
                         .unwrap_or_default();
                     WeightedPeer {
                         peer_id: peer_id.into(),
@@ -1299,7 +1297,8 @@ where
                         let trust = &self.trust;
                         let weight =
                             result.inner.contacts.get(peer_id)
-                                .and_then(|c| trust.weight(&c.public_key)).unwrap_or_default();
+                                .map(|c| get_weight(&trust, &c.public_key))
+                                .unwrap_or_default();
                         let peer = WeightedPeer {
                             weight,
                             peer_id: cache_key
@@ -1342,9 +1341,10 @@ where
                 let trust = &self.trust;
                 let peers = result.peers.into_iter().map(|peer_id| {
                     let weight =
-                        contacts.get(&peer_id).and_then(|c|
-                            trust.weight(&c.public_key)
-                        ).unwrap_or_default();
+                        contacts
+                            .get(&peer_id)
+                            .map(|c| get_weight(&trust, &c.public_key))
+                            .unwrap_or_default();
 
                     WeightedPeer {
                         peer_id: peer_id.into(),
@@ -1738,6 +1738,26 @@ where
             log!("\n{}", buckets);
         }
     }
+
+    fn get_certificates(&self, key: &PublicKey) -> Vec<Certificate> {
+        get_certificates(&self.trust, key)
+    }
+
+    fn get_weight(&self, key: &PublicKey) -> u32 {
+        get_weight(&self.trust, key)
+    }
+}
+
+fn get_certificates(trust: &TrustGraph, key: &PublicKey) -> Vec<Certificate> {
+    fluence_identity::PublicKey::from_libp2p(&key).map(|key|
+        trust.get_all_certs(&key, &[]).unwrap_or_default()
+    ).unwrap_or_default()
+}
+
+fn get_weight(trust: &TrustGraph, key: &PublicKey) -> u32 {
+    fluence_identity::PublicKey::from_libp2p(&key).map(|key|
+        trust.weight(&key).unwrap_or_default().unwrap_or_default()
+    ).unwrap_or(0)
 }
 
 /// Exponentially decrease the given duration (base 2).
@@ -1804,7 +1824,7 @@ where
             });
         }
 
-        self.connected_peers.insert(peer.clone());
+        self.connected_peers.insert(*peer);
         self.metrics.node_connected();
     }
 
@@ -1913,7 +1933,7 @@ where
         for query in self.queries.iter_mut() {
             query.on_failure(id);
         }
-        self.connection_updated(id.clone(), None, NodeStatus::Disconnected);
+        self.connection_updated(*id, None, NodeStatus::Disconnected);
         self.connected_peers.remove(id);
     }
 
@@ -1932,7 +1952,7 @@ where
                 // since the remote address on an inbound connection may be specific
                 // to that connection (e.g. typically the TCP port numbers).
                 let new_address = match endpoint {
-                    ConnectedPoint::Dialer { address } => Some(address.clone()),
+                    ConnectedPoint::Dialer { address } => Some(address),
                     ConnectedPoint::Listener { .. } => None,
                 };
 
@@ -2080,7 +2100,7 @@ where
                         key, records, quorum, cache_at
                     } = &mut query.inner.info {
                         if let Some(record) = record {
-                            records.push(PeerRecord{ peer: Some(source.clone()), record });
+                            records.push(PeerRecord{ peer: Some(source), record });
 
                             let quorum = quorum.get();
                             if records.len() >= quorum {
@@ -2104,7 +2124,7 @@ where
                             // closest node to the key that did *not* return the
                             // value is tracked in order to cache the record on
                             // that node if the query turns out to be successful.
-                            let source_key = kbucket::Key::from(source.clone());
+                            let source_key = kbucket::Key::from(source);
                             if let Some(cache_key) = cache_at {
                                 let key = kbucket::Key::new(key.clone());
                                 if source_key.distance(&key) < cache_key.distance(&key) {
@@ -2135,7 +2155,7 @@ where
                     if let QueryInfo::PutRecord {
                         phase: PutRecordPhase::PutRecord { success, .. }, quorum, ..
                     } = &mut query.inner.info {
-                        success.push(source.clone());
+                        success.push(source);
 
                         let quorum = quorum.get();
                         if success.len() >= quorum {
@@ -2270,7 +2290,7 @@ where
                                 peer_id, event, handler: NotifyHandler::Any
                             });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
-                            query.inner.pending_rpcs.push((peer_id.clone(), event));
+                            query.inner.pending_rpcs.push((peer_id, event));
                             self.queued_events.push_back(NetworkBehaviourAction::DialPeer {
                                 peer_id, condition: DialPeerCondition::Disconnected
                             });
@@ -2801,7 +2821,7 @@ impl QueryInfo {
                         key: key.clone(),
                         provider: crate::protocol::KadPeer {
                             public_key: provider_key.clone(),
-                            node_id: provider_id.clone(),
+                            node_id: *provider_id,
                             multiaddrs: external_addresses.clone(),
                             connection_ty: crate::protocol::KadConnectionType::Connected,
                             certificates: certificates.clone(),

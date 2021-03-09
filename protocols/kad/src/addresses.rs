@@ -34,6 +34,7 @@ pub enum Remove {
     KeepLast = 1
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl Addresses {
     /// Creates a new list of addresses.
     pub fn new(addr: Multiaddr) -> Addresses {

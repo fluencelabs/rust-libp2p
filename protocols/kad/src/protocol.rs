@@ -31,7 +31,7 @@ use codec::UviBytes;
 use crate::dht_proto as proto;
 use crate::record::{self, Record};
 use futures::prelude::*;
-use futures_codec::Framed;
+use asynchronous_codec::Framed;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use prost::Message;
@@ -133,13 +133,16 @@ impl TryFrom<proto::message::Peer> for KadPeer {
         for cert in peer.certificates.into_iter() {
             let mut chain = Vec::with_capacity(cert.chain.len());
             for trust in cert.chain.into_iter() {
-                let issued_for = PublicKey::decode(trust.issued_for.as_slice())
+                let issued_for = fluence_identity::PublicKey::from_bytes(trust.issued_for.as_slice())
                     .map_err(|e|
                         invalid_data(format!("invalid issued_for: {}", e).as_str())
                     )?;
                 let expires_at: Duration = Duration::from_secs(trust.expires_at_secs);
                 let issued_at: Duration = Duration::from_secs(trust.issued_at_secs);
-                let signature: Vec<u8> = trust.signature;
+                let signature = fluence_identity::Signature::from_bytes(&trust.signature)
+                    .map_err(|e|
+                        invalid_data(format!("invalid signature: {}", e).as_str())
+                    )?;
 
                 let trust = Trust::new(issued_for, expires_at, issued_at, signature);
                 chain.push(trust);
@@ -163,9 +166,9 @@ impl Into<proto::message::Peer> for KadPeer {
             proto::Certificate {
                 chain: cert.chain.into_iter().map(|trust| {
                     proto::Trust {
-                        issued_for: trust.issued_for.encode().to_vec(),
+                        issued_for: trust.issued_for.to_bytes().to_vec(),
                         expires_at_secs: trust.expires_at.as_secs(),
-                        signature: trust.signature,
+                        signature: trust.signature.to_bytes().to_vec(),
                         issued_at_secs: trust.issued_at.as_secs(),
                     }
                 }).collect(),

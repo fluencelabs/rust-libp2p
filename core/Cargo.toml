@@ -2,7 +2,7 @@
 name = "fluence-fork-libp2p-core"
 edition = "2018"
 description = "Core traits and structs of libp2p"
-version = "0.26.1"
+version = "0.27.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -23,18 +23,18 @@ futures-timer = "3"
 lazy_static = "1.2"
 libsecp256k1 = { version = "0.3.1", optional = true }
 log = "0.4"
-multiaddr = { package = "fluence-fork-parity-multiaddr", version = "0.10.1", path = "../misc/multiaddr" }
+multiaddr = { package = "fluence-fork-parity-multiaddr", version = "0.11", path = "../misc/multiaddr" }
 multihash = { version = "0.13", default-features = false, features = ["std", "multihash-impl", "identity", "sha2"] }
-multistream-select = { version = "0.9.2", path = "../misc/multistream-select", package = "fluence-fork-multistream-select" }
+multistream-select = { version = "0.10", path = "../misc/multistream-select", package = "fluence-fork-multistream-select" }
 parking_lot = "0.11.0"
 pin-project = "1.0.0"
-prost = "0.6.1"
+prost = "0.7"
 rand = "0.7"
 rw-stream-sink = "0.2.0"
 sha2 = "0.9.1"
 smallvec = "1.0"
 thiserror = "1.0"
-unsigned-varint = "0.5"
+unsigned-varint = "0.7"
 void = "1"
 zeroize = "1"
 serde = { version = "1.0.114", default-features = false }
@@ -43,17 +43,17 @@ serde = { version = "1.0.114", default-features = false }
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false }
 
 [dev-dependencies]
-async-std = "1.6.2"
+async-std = { version = "1.6.2", features = ["attributes"] }
 criterion = "0.3"
 libp2p-mplex = { path = "../muxers/mplex", package = "fluence-fork-libp2p-mplex" }
-libp2p-noise = { path = "../protocols/noise", package = "fluence-fork-libp2p-noise" }
-libp2p-tcp = { path = "../transports/tcp", features = ["async-std"], package = "fluence-fork-libp2p-tcp" }
+libp2p-noise = { path = "../transports/noise", package = "fluence-fork-libp2p-noise" }
+libp2p-tcp = { path = "../transports/tcp", package = "fluence-fork-libp2p-tcp" }
 multihash = { version = "0.13", default-features = false, features = ["arb"] }
 quickcheck = "0.9.0"
 wasm-timer = "0.2"
 
 [build-dependencies]
-prost-build = "0.6"
+prost-build = "0.7"
 
 [features]
 default = ["secp256k1"]

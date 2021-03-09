@@ -24,7 +24,7 @@ use crate::codec::{Codec, Frame, LocalStreamId, RemoteStreamId};
 use log::{debug, trace};
 use futures::{prelude::*, ready, stream::Fuse};
 use futures::task::{AtomicWaker, ArcWake, waker_ref, WakerRef};
-use futures_codec::Framed;
+use asynchronous_codec::Framed;
 use nohash_hasher::{IntMap, IntSet};
 use parking_lot::Mutex;
 use smallvec::SmallVec;
@@ -321,7 +321,7 @@ where
 
         // Remove the substream, scheduling pending frames as necessary.
         match self.substreams.remove(&id) {
-            None => return,
+            None => {},
             Some(state) => {
                 // If we fell below the substream limit, notify tasks that had
                 // interest in opening an outbound substream earlier.
@@ -442,7 +442,7 @@ where
             // Read the next frame.
             match ready!(self.poll_read_frame(cx, Some(id)))? {
                 Frame::Data { data, stream_id } if stream_id.into_local() == id => {
-                    return Poll::Ready(Ok(Some(data.clone())))
+                    return Poll::Ready(Ok(Some(data)))
                 },
                 Frame::Data { stream_id, data } => {
                     // The data frame is for a different stream than the one
@@ -595,18 +595,16 @@ where
                 // this task again to have a chance at progress.
                 trace!("{}: No task to read from blocked stream. Waking current task.", self.id);
                 cx.waker().clone().wake();
+            } else if let Some(id) = stream_id {
+                // We woke some other task, but are still interested in
+                // reading `Data` frames from the current stream when unblocked.
+                debug_assert!(blocked_id != &id, "Unexpected attempt at reading a new \
+                    frame from a substream with a full buffer.");
+                let _ = NotifierRead::register_read_stream(&self.notifier_read, cx.waker(), id);
             } else {
-                if let Some(id) = stream_id {
-                    // We woke some other task, but are still interested in
-                    // reading `Data` frames from the current stream when unblocked.
-                    debug_assert!(blocked_id != &id, "Unexpected attempt at reading a new \
-                        frame from a substream with a full buffer.");
-                    let _ = NotifierRead::register_read_stream(&self.notifier_read, cx.waker(), id);
-                } else {
-                    // We woke some other task but are still interested in
-                    // reading new `Open` frames when unblocked.
-                    let _ = NotifierRead::register_next_stream(&self.notifier_read, cx.waker());
-                }
+                // We woke some other task but are still interested in
+                // reading new `Open` frames when unblocked.
+                let _ = NotifierRead::register_next_stream(&self.notifier_read, cx.waker());
             }
 
             return Poll::Pending
@@ -932,7 +930,7 @@ impl NotifierRead {
 
 impl ArcWake for NotifierRead {
     fn wake_by_ref(this: &Arc<Self>) {
-        let wakers = mem::replace(&mut *this.read_stream.lock(), Default::default());
+        let wakers = mem::take(&mut *this.read_stream.lock());
         for (_, waker) in wakers {
             waker.wake();
         }
@@ -963,7 +961,7 @@ impl NotifierWrite {
 
 impl ArcWake for NotifierWrite {
     fn wake_by_ref(this: &Arc<Self>) {
-        let wakers = mem::replace(&mut *this.pending.lock(), Default::default());
+        let wakers = mem::take(&mut *this.pending.lock());
         for waker in wakers {
             waker.wake();
         }
@@ -985,7 +983,7 @@ impl NotifierOpen {
     }
 
     fn wake_all(&mut self) {
-        let wakers = mem::replace(&mut self.pending, Default::default());
+        let wakers = mem::take(&mut self.pending);
         for waker in wakers {
             waker.wake();
         }
@@ -1006,7 +1004,7 @@ mod tests {
     use async_std::task;
     use bytes::BytesMut;
     use futures::prelude::*;
-    use futures_codec::{Decoder, Encoder};
+    use asynchronous_codec::{Decoder, Encoder};
     use quickcheck::*;
     use rand::prelude::*;
     use std::collections::HashSet;

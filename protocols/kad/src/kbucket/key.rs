@@ -25,6 +25,7 @@ use sha2::{Digest, Sha256};
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use uint::*;
+use crate::record;
 
 construct_uint! {
     /// 256-bit unsigned integer.
@@ -54,7 +55,7 @@ impl<T> Key<T> {
     /// [`Key::into_preimage`].
     pub fn new(preimage: T) -> Key<T>
     where
-        T: Borrow<[u8]>,
+        T: Borrow<[u8]>
     {
         let bytes = KeyBytes::new(preimage.borrow());
         Key { preimage, bytes }
@@ -73,7 +74,7 @@ impl<T> Key<T> {
     /// Computes the distance of the keys according to the XOR metric.
     pub fn distance<U>(&self, other: &U) -> Distance
     where
-        U: AsRef<KeyBytes>,
+        U: AsRef<KeyBytes>
     {
         self.bytes.distance(other)
     }
@@ -114,6 +115,18 @@ impl From<PeerId> for Key<PeerId> {
     }
 }
 
+impl From<Vec<u8>> for Key<Vec<u8>> {
+    fn from(b: Vec<u8>) -> Self {
+        Key::new(b)
+    }
+}
+
+impl From<record::Key> for Key<record::Key> {
+    fn from(k: record::Key) -> Self {
+        Key::new(k)
+    }
+}
+
 impl<T> AsRef<KeyBytes> for Key<T> {
     fn as_ref(&self) -> &KeyBytes {
         &self.bytes
@@ -143,7 +156,7 @@ impl KeyBytes {
     /// value through a random oracle.
     pub fn new<T>(value: T) -> Self
     where
-        T: Borrow<[u8]>,
+        T: Borrow<[u8]>
     {
         KeyBytes(Sha256::digest(value.borrow()))
     }
@@ -151,7 +164,7 @@ impl KeyBytes {
     /// Computes the distance of the keys according to the XOR metric.
     pub fn distance<U>(&self, other: &U) -> Distance
     where
-        U: AsRef<KeyBytes>,
+        U: AsRef<KeyBytes>
     {
         let a = U256::from(self.0.as_slice());
         let b = U256::from(other.as_ref().0.as_slice());

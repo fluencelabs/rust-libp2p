@@ -48,6 +48,7 @@ use quickcheck::*;
 use rand::{Rng, random, thread_rng, rngs::StdRng, SeedableRng};
 use std::{collections::{HashSet, HashMap}, time::Duration, num::NonZeroUsize, u64};
 use libp2p_core::identity::ed25519;
+use trust_graph::InMemoryStorage;
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
@@ -67,8 +68,12 @@ fn build_node_with_config(cfg: KademliaConfig) -> (ed25519::Keypair, Multiaddr, 
         .boxed();
 
     let local_id = local_public_key.clone().into_peer_id();
+    let trust = {
+        let pk = fluence_identity::PublicKey::from_libp2p(&ed25519_key.public()).unwrap();
+        let storage = InMemoryStorage::new_in_memory(vec![(pk, 1)]);
+        TrustGraph::new(storage)
+    };
     let store = MemoryStore::new(local_id.clone());
-    let trust = TrustGraph::new(vec![(ed25519_key.public(), 1)]);
     let behaviour = Kademlia::with_config(ed25519_key.clone(), local_id.clone(), store, cfg.clone(), trust);
 
     let mut swarm = Swarm::new(transport, behaviour, local_id);
@@ -172,6 +177,7 @@ fn bootstrap() {
         ).into_iter()
             .map(|(_, _a, s)| s)
             .collect::<Vec<_>>();
+
         let swarm_ids: Vec<_> = swarms.iter()
             .map(Swarm::local_peer_id)
             .cloned()
@@ -477,7 +483,7 @@ fn put_record() {
             // Connect `single_swarm` to three bootnodes.
             for i in 0..3 {
                 single_swarm.2.add_address(
-                    Swarm::local_peer_id(&fully_connected_swarms[0].2),
+                    &Swarm::local_peer_id(&fully_connected_swarms[0].2),
                 fully_connected_swarms[i].1.clone(),
                     fully_connected_swarms[i].0.public(),
                 );
@@ -758,7 +764,7 @@ fn add_provider() {
             // Connect `single_swarm` to three bootnodes.
             for i in 0..3 {
                 single_swarm.2.add_address(
-                    Swarm::local_peer_id(&fully_connected_swarms[0].2),
+                    &Swarm::local_peer_id(&fully_connected_swarms[0].2),
                 fully_connected_swarms[i].1.clone(),
                     fully_connected_swarms[i].0.public(),
                 );
@@ -960,8 +966,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     trudy.2.store.put(record_trudy.clone()).unwrap();
 
     // Make `trudy` and `bob` known to `alice`.
-    alice.2.add_address(Swarm::local_peer_id(&trudy.2), trudy.1.clone(), trudy.0.public());
-    alice.2.add_address(Swarm::local_peer_id(&bob.2), bob.1.clone(), bob.0.public());
+    alice.2.add_address(&Swarm::local_peer_id(&trudy.2), trudy.1.clone(), trudy.0.public());
+    alice.2.add_address(&Swarm::local_peer_id(&bob.2), bob.1.clone(), bob.0.public());
 
     // Drop the swarm addresses.
     let (mut alice, mut bob, mut trudy) = (alice.2, bob.2, trudy.2);
@@ -1191,7 +1197,8 @@ fn make_swarms(total: usize, config: KademliaConfig) -> Vec<(Keypair, Multiaddr,
 #[cfg(test)]
 mod certificates {
     use super::*;
-    use trust_graph::{KeyPair, current_time};
+    use trust_graph::current_time;
+    use fluence_identity::{KeyPair, PublicKey};
 
     fn gen_root_cert(from: &KeyPair, to: PublicKey) -> Certificate {
         let cur_time = current_time();
@@ -1223,7 +1230,7 @@ mod certificates {
     }
 
     fn bs(pk: PublicKey) -> String {
-        bs58::encode(pk.encode()).into_string()
+        bs58::encode(pk.to_bytes()).into_string()
     }
 
     #[test]
@@ -1239,15 +1246,19 @@ mod certificates {
             // Set same weights to all nodes, so they store each other's certificates
             let weights = swarms.iter().map(|(kp, _, _)| (kp.public(), 1)).collect::<Vec<_>>();
             for swarm in swarms.iter_mut() {
-                swarm.2.trust.add_root_weights(weights.clone());
+                for (pk, weight) in weights.iter() {
+                    let pk = fluence_identity::PublicKey::from_libp2p(&pk).unwrap();
+                    swarm.2.trust.add_root_weight(pk, *weight);
+                }
             }
 
             let mut swarms = swarms.into_iter();
             let (first_kp, _, first) = swarms.next().unwrap();
             // issue certs from each swarm to the first swarm, so all swarms trust the first one
             let mut swarms = swarms.map(|(kp, _, mut swarm)| {
+                let pk = fluence_identity::PublicKey::from_libp2p(&first_kp.public()).unwrap();
                 // root cert, its chain is [self-signed: swarm -> swarm, swarm -> first]
-                let root = gen_root_cert(&kp.clone().into(), first_kp.public());
+                let root = gen_root_cert(&kp.clone().into(), pk);
                 swarm.trust.add(&root, current_time()).unwrap();
                 SwarmWithKeypair { swarm, kp }
             });
@@ -1258,16 +1269,25 @@ mod certificates {
 
             // issue cert from the first swarm to the second (will be later disseminated via kademlia)
             // chain: 0 -> 1
-            let cert_0_1 = gen_root_cert(&swarm0.kp.clone().into(), swarm1.kp.public());
+            let cert_0_1 = {
+                let pk = fluence_identity::PublicKey::from_libp2p(&swarm1.kp.public()).unwrap();
+                gen_root_cert(&swarm0.kp.clone().into(), pk)
+            };
             swarm0.swarm.trust.add(&cert_0_1, current_time()).unwrap();
-            let cert_0_1_check = swarm0.swarm.trust.get_all_certs(&swarm1.kp.public(), &[]);
+            let cert_0_1_check = {
+                let pk = fluence_identity::PublicKey::from_libp2p(&swarm1.kp.public()).unwrap();
+                swarm0.swarm.trust.get_all_certs(pk, &[]).unwrap()
+            };
             assert_eq!(cert_0_1_check.len(), 1);
             let cert_0_1_check = cert_0_1_check.into_iter().nth(0).unwrap();
             assert_eq!(cert_0_1, cert_0_1_check);
 
             // check that this certificate (with root prepended) can be added to trust graph of any other node
             // chain: (2 -> 0)
-            let mut cert_2_0_1 = gen_root_cert(&swarm2.kp.clone().into(), swarm0.kp.public());
+            let mut cert_2_0_1 = {
+                let pk = fluence_identity::PublicKey::from_libp2p(&swarm0.kp.public()).unwrap();
+                gen_root_cert(&swarm2.kp.clone().into(), pk)
+            };
             // chain: (2 -> 0) ++ (0 -> 1)
             cert_2_0_1.chain.extend_from_slice(&cert_0_1.chain[1..]);
             swarm2.swarm.trust.add(cert_2_0_1, current_time()).unwrap();
@@ -1305,13 +1325,26 @@ mod certificates {
 
                 // check that certificates for `swarm[1].kp` were disseminated
                 for swarm in swarms.iter().skip(2) {
-                    let disseminated = swarm.swarm.trust.get_all_certs(kp_1.clone(), &[]);
+                    let disseminated = {
+                        let pk = fluence_identity::PublicKey::from_libp2p(&kp_1).unwrap();
+                        swarm.swarm.trust.get_all_certs(&pk, &[]).unwrap()
+                    };
                     // take only certificate converging to current `swarm` public key
-                    let disseminated = disseminated.into_iter().find(|c| &c.chain[0].issued_for == &swarm.kp.public()).unwrap();
+                    let disseminated = {
+                        let pk = fluence_identity::PublicKey::from_libp2p(&swarm.kp.public()).unwrap();
+                        disseminated.into_iter().find(|c| &c.chain[0].issued_for == &pk).unwrap()
+                    };
                     // swarm -> swarm0 -> swarm1
                     assert_eq!(disseminated.chain.len(), 3);
                     let pubkeys = disseminated.chain.iter().map(|c| &c.issued_for).collect::<Vec<_>>();
-                    assert_eq!(pubkeys, vec![&swarm.kp.public(), &swarms[0].kp.public(), &swarms[1].kp.public()]);
+                    assert_eq!(
+                        pubkeys,
+                        vec![
+                            &fluence_identity::PublicKey::from_libp2p(&swarm.kp.public()).unwrap(),
+                            &fluence_identity::PublicKey::from_libp2p(&swarms[0].kp.public()).unwrap(),
+                            &fluence_identity::PublicKey::from_libp2p(&swarms[1].kp.public()).unwrap(),
+                        ]
+                    );
 
                     // last trust in the certificate must be equal to previously generated (0 -> 1) trust
                     let last = disseminated.chain.last().unwrap();

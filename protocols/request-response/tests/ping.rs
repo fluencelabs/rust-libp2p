@@ -31,12 +31,40 @@ use libp2p_core::{
 };
 use libp2p_noise::{NoiseConfig, X25519Spec, Keypair};
 use libp2p_request_response::*;
-use libp2p_swarm::Swarm;
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_tcp::TcpConfig;
 use futures::{prelude::*, channel::mpsc, executor::LocalPool, task::SpawnExt};
 use rand::{self, Rng};
 use std::{io, iter};
 use std::{collections::HashSet, num::NonZeroU16};
+
+#[test]
+fn is_response_outbound() {
+    let ping = Ping("ping".to_string().into_bytes());
+    let offline_peer = PeerId::random();
+
+    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let cfg = RequestResponseConfig::default();
+
+    let (peer1_id, trans) = mk_transport();
+    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
+    let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id.clone());
+
+    let request_id1 = swarm1.send_request(&offline_peer, ping.clone());
+
+    match futures::executor::block_on(swarm1.next()) {
+        RequestResponseEvent::OutboundFailure{peer, request_id: req_id, error: _error} => {
+            assert_eq!(&offline_peer, &peer);
+            assert_eq!(req_id, request_id1);
+        },
+        e => panic!("Peer: Unexpected event: {:?}", e),
+    }
+
+    let request_id2 = swarm1.send_request(&offline_peer, ping.clone());
+
+    assert!(!swarm1.is_pending_outbound(&offline_peer, &request_id1));
+    assert!(swarm1.is_pending_outbound(&offline_peer, &request_id2));
+}
 
 /// Exercises a simple ping protocol.
 #[test]
@@ -64,27 +92,24 @@ fn ping_protocol() {
     let expected_pong = pong.clone();
 
     let peer1 = async move {
-        while let Some(_) = swarm1.next().now_or_never() {}
-
-        let l = Swarm::listeners(&swarm1).next().unwrap();
-        tx.send(l.clone()).await.unwrap();
-
         loop {
-            match swarm1.next().await {
-                RequestResponseEvent::Message {
+            match swarm1.next_event().await {
+                SwarmEvent::NewListenAddr(addr) => tx.send(addr).await.unwrap(),
+                SwarmEvent::Behaviour(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Request { request, channel, .. }
-                } => {
+                }) => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
                     swarm1.send_response(channel, pong.clone()).unwrap();
                 },
-                RequestResponseEvent::ResponseSent {
+                SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent {
                     peer, ..
-                } => {
+                }) => {
                     assert_eq!(&peer, &peer2_id);
                 }
-                e => panic!("Peer1: Unexpected event: {:?}", e)
+                SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {:?}", e),
+                _ => {}
             }
         }
     };
@@ -96,6 +121,7 @@ fn ping_protocol() {
         let addr = rx.next().await.unwrap();
         swarm2.add_address(&peer1_id, addr.clone());
         let mut req_id = swarm2.send_request(&peer1_id, ping.clone());
+        assert!(swarm2.is_pending_outbound(&peer1_id, &req_id));
 
         loop {
             match swarm2.next().await {
@@ -205,26 +231,24 @@ fn ping_protocol_throttled() {
     swarm2.set_receive_limit(NonZeroU16::new(limit2).unwrap());
 
     let peer1 = async move {
-        while let Some(_) = swarm1.next().now_or_never() {}
-
-        let l = Swarm::listeners(&swarm1).next().unwrap();
-        tx.send(l.clone()).await.unwrap();
         for i in 1 .. {
-            match swarm1.next().await {
-                throttled::Event::Event(RequestResponseEvent::Message {
+            match swarm1.next_event().await {
+                SwarmEvent::NewListenAddr(addr) => tx.send(addr).await.unwrap(),
+                SwarmEvent::Behaviour(throttled::Event::Event(RequestResponseEvent::Message {
                     peer,
                     message: RequestResponseMessage::Request { request, channel, .. },
-                }) => {
+                })) => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
                     swarm1.send_response(channel, pong.clone()).unwrap();
                 },
-                throttled::Event::Event(RequestResponseEvent::ResponseSent {
+                SwarmEvent::Behaviour(throttled::Event::Event(RequestResponseEvent::ResponseSent {
                     peer, ..
-                }) => {
+                })) => {
                     assert_eq!(&peer, &peer2_id);
                 }
-                e => panic!("Peer1: Unexpected event: {:?}", e)
+                SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {:?}", e),
+                _ => {}
             }
             if i % 31 == 0 {
                 let lim = rand::thread_rng().gen_range(1, 17);
