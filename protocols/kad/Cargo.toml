@@ -33,8 +33,8 @@ void = "1.0"
 bs58 = "0.3.0"
 derivative = "2.0.2"
 
-trust-graph = {path = "../../../trust-graph"}
-fluence-identity = {path = "../../../trust-graph/identity"}
+trust-graph = {git = "https://github.com/fluencelabs/trust-graph.git", branch = "identity_rework"}
+fluence-identity = {git = "https://github.com/fluencelabs/trust-graph.git", branch = "identity_rework", path = "identity"}
 prometheus = "0.9.0"
 
 [dev-dependencies]
