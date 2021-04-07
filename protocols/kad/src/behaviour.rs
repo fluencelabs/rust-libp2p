@@ -40,7 +40,7 @@ use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState, Weigh
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use crate::contact::Contact;
 use fnv::{FnvHashMap, FnvHashSet};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId, multiaddr};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId, multiaddr, identity::PublicKey};
 use libp2p_swarm::{
     DialPeerCondition,
     NetworkBehaviour,
