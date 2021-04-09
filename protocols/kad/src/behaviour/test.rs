@@ -35,7 +35,6 @@ use libp2p_core::{
     connection::{ConnectedPoint, ConnectionId},
     PeerId,
     Transport,
-    identity,
     transport::MemoryTransport,
     multiaddr::{Protocol, Multiaddr, multiaddr},
     upgrade,
@@ -47,18 +46,17 @@ use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{Rng, random, thread_rng, rngs::StdRng, SeedableRng};
 use std::{collections::{HashSet, HashMap}, time::Duration, num::NonZeroUsize, u64};
-use libp2p_core::identity::ed25519;
 use trust_graph::InMemoryStorage;
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
-fn build_node() -> (ed25519::Keypair, Multiaddr, TestSwarm) {
+fn build_node() -> (Keypair, Multiaddr, TestSwarm) {
     build_node_with_config(Default::default())
 }
 
-fn build_node_with_config(cfg: KademliaConfig) -> (ed25519::Keypair, Multiaddr, TestSwarm) {
-    let ed25519_key = ed25519::Keypair::generate();
-    let local_key = identity::Keypair::Ed25519(ed25519_key.clone());
+fn build_node_with_config(cfg: KademliaConfig) -> (Keypair, Multiaddr, TestSwarm) {
+    let ed25519_key = Keypair::generate_ed25519();
+    let local_key = ed25519_key.clone();
     let local_public_key = local_key.public();
     let noise_keys = noise::Keypair::<noise::X25519>::new().into_authentic(&local_key).unwrap();
     let transport = MemoryTransport::default()
@@ -69,7 +67,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (ed25519::Keypair, Multiaddr, 
 
     let local_id = local_public_key.clone().into_peer_id();
     let trust = {
-        let pk = fluence_identity::PublicKey::from_libp2p(&ed25519_key.public()).unwrap();
+        let pk = fluence_identity::PublicKey::from(ed25519_key.public());
         let storage = InMemoryStorage::new_in_memory(vec![(pk, 1)]);
         TrustGraph::new(storage)
     };
@@ -85,21 +83,21 @@ fn build_node_with_config(cfg: KademliaConfig) -> (ed25519::Keypair, Multiaddr, 
 }
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
-fn build_nodes(num: usize) -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)> {
+fn build_nodes(num: usize) -> Vec<(Keypair, Multiaddr, TestSwarm)> {
     build_nodes_with_config(num, Default::default())
 }
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
-fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)> {
+fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> Vec<(Keypair, Multiaddr, TestSwarm)> {
     (0..num).map(|_| build_node_with_config(cfg.clone())).collect()
 }
 
-fn build_connected_nodes(total: usize, step: usize) -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)> {
+fn build_connected_nodes(total: usize, step: usize) -> Vec<(Keypair, Multiaddr, TestSwarm)> {
     build_connected_nodes_with_config(total, step, Default::default())
 }
 
 fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaConfig)
-    -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)>
+    -> Vec<(Keypair, Multiaddr, TestSwarm)>
 {
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_ids: Vec<_> = swarms.iter()
@@ -121,7 +119,7 @@ fn build_connected_nodes_with_config(total: usize, step: usize, cfg: KademliaCon
 }
 
 fn build_fully_connected_nodes_with_config(total: usize, cfg: KademliaConfig)
-    -> Vec<(ed25519::Keypair, Multiaddr, TestSwarm)>
+    -> Vec<(Keypair, Multiaddr, TestSwarm)>
 {
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_addr_and_peer_id: Vec<_> = swarms.iter()
@@ -1229,10 +1227,6 @@ mod certificates {
         pub kp: Keypair,
     }
 
-    fn bs(pk: PublicKey) -> String {
-        bs58::encode(pk.to_bytes()).into_string()
-    }
-
     #[test]
     pub fn certificate_dissemination() {
         for _ in 1..10 {
@@ -1247,8 +1241,8 @@ mod certificates {
             let weights = swarms.iter().map(|(kp, _, _)| (kp.public(), 1)).collect::<Vec<_>>();
             for swarm in swarms.iter_mut() {
                 for (pk, weight) in weights.iter() {
-                    let pk = fluence_identity::PublicKey::from_libp2p(&pk).unwrap();
-                    swarm.2.trust.add_root_weight(pk, *weight);
+                    let pk = fluence_identity::PublicKey::from(pk.clone());
+                    swarm.2.trust.add_root_weight(pk, *weight).expect("trust.add_root_weight failed");
                 }
             }
 
@@ -1256,7 +1250,7 @@ mod certificates {
             let (first_kp, _, first) = swarms.next().unwrap();
             // issue certs from each swarm to the first swarm, so all swarms trust the first one
             let mut swarms = swarms.map(|(kp, _, mut swarm)| {
-                let pk = fluence_identity::PublicKey::from_libp2p(&first_kp.public()).unwrap();
+                let pk = fluence_identity::PublicKey::from(first_kp.public());
                 // root cert, its chain is [self-signed: swarm -> swarm, swarm -> first]
                 let root = gen_root_cert(&kp.clone().into(), pk);
                 swarm.trust.add(&root, current_time()).unwrap();
@@ -1270,12 +1264,12 @@ mod certificates {
             // issue cert from the first swarm to the second (will be later disseminated via kademlia)
             // chain: 0 -> 1
             let cert_0_1 = {
-                let pk = fluence_identity::PublicKey::from_libp2p(&swarm1.kp.public()).unwrap();
+                let pk = fluence_identity::PublicKey::from(swarm1.kp.public());
                 gen_root_cert(&swarm0.kp.clone().into(), pk)
             };
             swarm0.swarm.trust.add(&cert_0_1, current_time()).unwrap();
             let cert_0_1_check = {
-                let pk = fluence_identity::PublicKey::from_libp2p(&swarm1.kp.public()).unwrap();
+                let pk = fluence_identity::PublicKey::from(swarm1.kp.public());
                 swarm0.swarm.trust.get_all_certs(pk, &[]).unwrap()
             };
             assert_eq!(cert_0_1_check.len(), 1);
@@ -1285,7 +1279,7 @@ mod certificates {
             // check that this certificate (with root prepended) can be added to trust graph of any other node
             // chain: (2 -> 0)
             let mut cert_2_0_1 = {
-                let pk = fluence_identity::PublicKey::from_libp2p(&swarm0.kp.public()).unwrap();
+                let pk = fluence_identity::PublicKey::from(swarm0.kp.public());
                 gen_root_cert(&swarm2.kp.clone().into(), pk)
             };
             // chain: (2 -> 0) ++ (0 -> 1)
@@ -1326,12 +1320,12 @@ mod certificates {
                 // check that certificates for `swarm[1].kp` were disseminated
                 for swarm in swarms.iter().skip(2) {
                     let disseminated = {
-                        let pk = fluence_identity::PublicKey::from_libp2p(&kp_1).unwrap();
+                        let pk = fluence_identity::PublicKey::from(kp_1.clone());
                         swarm.swarm.trust.get_all_certs(&pk, &[]).unwrap()
                     };
                     // take only certificate converging to current `swarm` public key
                     let disseminated = {
-                        let pk = fluence_identity::PublicKey::from_libp2p(&swarm.kp.public()).unwrap();
+                        let pk = fluence_identity::PublicKey::from(swarm.kp.public());
                         disseminated.into_iter().find(|c| &c.chain[0].issued_for == &pk).unwrap()
                     };
                     // swarm -> swarm0 -> swarm1
@@ -1340,9 +1334,9 @@ mod certificates {
                     assert_eq!(
                         pubkeys,
                         vec![
-                            &fluence_identity::PublicKey::from_libp2p(&swarm.kp.public()).unwrap(),
-                            &fluence_identity::PublicKey::from_libp2p(&swarms[0].kp.public()).unwrap(),
-                            &fluence_identity::PublicKey::from_libp2p(&swarms[1].kp.public()).unwrap(),
+                            &fluence_identity::PublicKey::from(swarm.kp.public()),
+                            &fluence_identity::PublicKey::from(swarms[0].kp.public()),
+                            &fluence_identity::PublicKey::from(swarms[1].kp.public()),
                         ]
                     );
 

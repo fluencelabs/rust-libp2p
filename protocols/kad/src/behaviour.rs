@@ -57,7 +57,7 @@ use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use std::vec;
 use wasm_timer::Instant;
-use libp2p_core::identity::ed25519::{Keypair, PublicKey};
+use libp2p_core::identity::{Keypair, PublicKey};
 use trust_graph::{Certificate};
 use derivative::Derivative;
 use crate::metrics::Metrics;
@@ -928,10 +928,10 @@ where
                             };
                             let certificates = {
                                 match node_id.as_public_key() {
-                                    Some(libp2p_core::identity::PublicKey::Ed25519(pk)) =>
+                                    Some(pk) =>
                                         get_certificates(&trust, &pk),
-                                    key => {
-                                        log::warn!("Provider {} has a non-Ed25519 public key: {:?}", node_id, key);
+                                    None => {
+                                        log::warn!("Provider {} has a non-inlined public key: {:?}", node_id, key);
                                         vec![]
                                     }
                                 }
@@ -1074,7 +1074,7 @@ where
         debug!(
             "Calculated weight for {} pk {}: {}",
             entry.key().preimage(),
-            bs58::encode(contact.public_key.encode().to_vec().as_slice()).into_string(),
+            bs58::encode(contact.public_key.clone().into_protobuf_encoding()).into_string(),
             weight
         );
         // TODO: how to avoid clone when bucket isn't Full?
@@ -1749,15 +1749,11 @@ where
 }
 
 fn get_certificates(trust: &TrustGraph, key: &PublicKey) -> Vec<Certificate> {
-    fluence_identity::PublicKey::from_libp2p(&key).map(|key|
-        trust.get_all_certs(&key, &[]).unwrap_or_default()
-    ).unwrap_or_default()
+    trust.get_all_certs(fluence_identity::PublicKey::from(key.clone()), &[]).unwrap_or_default()
 }
 
 fn get_weight(trust: &TrustGraph, key: &PublicKey) -> u32 {
-    fluence_identity::PublicKey::from_libp2p(&key).map(|key|
-        trust.weight(&key).unwrap_or_default().unwrap_or_default()
-    ).unwrap_or(0)
+    trust.weight(fluence_identity::PublicKey::from(key.clone())).unwrap_or_default().unwrap_or_default()
 }
 
 /// Exponentially decrease the given duration (base 2).
@@ -1967,18 +1963,7 @@ where
                         }));
 
                 let contact = contact.or({
-                    let pk = source.as_public_key()
-                        .and_then(|pk| {
-                            match pk {
-                                libp2p_core::identity::PublicKey::Ed25519(pk) => {
-                                    Some(pk)
-                                }
-                                _ => {
-                                    log::warn!("Cannot create contact with non-ed25519 key.");
-                                    None
-                                }
-                            }
-                        });
+                    let pk = source.as_public_key();
                     let address = new_address.map(Addresses::new);
                     address.zip(pk).map(|(addr, pk)| Contact::new(addr, pk))
                 });

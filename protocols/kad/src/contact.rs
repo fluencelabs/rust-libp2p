@@ -77,7 +77,7 @@ impl std::fmt::Display for Contact {
         write!(
             f,
             "Contact({}, addresses: {:?})",
-            bs58::encode(self.public_key.encode()).into_string(),
+            bs58::encode(self.public_key.clone().into_protobuf_encoding()).into_string(),
             self.addresses // TODO: implement better display for addresses
         )
     }
@@ -88,7 +88,7 @@ impl std::fmt::Debug for Contact {
         write!(
             f,
             "Contact {{ public_key: {}, addresses: {:?} }}",
-            bs58::encode(self.public_key.encode()).into_string(),
+            bs58::encode(self.public_key.clone().into_protobuf_encoding()).into_string(),
             self.addresses // TODO: implement better display for addresses
         )
     }
