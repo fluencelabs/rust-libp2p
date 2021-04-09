@@ -24,7 +24,7 @@ use asn1_der::{FromDerObject, DerObject};
 use rand::RngCore;
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use secp256k1::{Message, Signature};
-use super::error::{DecodingError, SigningError};
+use super::error::*;
 use zeroize::Zeroize;
 use core::fmt;
 

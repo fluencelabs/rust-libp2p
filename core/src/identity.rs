@@ -28,7 +28,7 @@ pub mod secp256k1;
 
 pub mod error;
 
-use self::error::*;
+use self::error::{DecodingError, SigningError};
 use crate::{PeerId, keys_proto};
 
 /// Identity keypair of a node.

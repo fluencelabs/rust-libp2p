@@ -142,3 +142,6 @@ wasm-timer = { git = "https://github.com/fluencelabs/wasm-timer", branch = "satu
 
 [package.metadata.workspaces]
 independent = true
+
+[patch.'https://github.com/fluencelabs/rust-libp2p']
+libp2p-core = { package = "fluence-fork-libp2p-core", path = "core" }
