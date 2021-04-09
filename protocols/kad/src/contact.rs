@@ -17,7 +17,7 @@
 use crate::protocol::KadPeer;
 use crate::Addresses;
 use bs58;
-use libp2p_core::identity::ed25519::PublicKey;
+use libp2p_core::identity::PublicKey;
 use libp2p_core::Multiaddr;
 use smallvec::SmallVec;
 use std::fmt::Formatter;

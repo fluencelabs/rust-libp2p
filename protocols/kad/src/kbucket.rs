@@ -81,19 +81,21 @@ pub use sub_bucket::*;
 
 use crate::kbucket::weighted_iter::WeightedIter;
 use bucket::KBucket;
-use libp2p_core::identity::ed25519;
-use libp2p_core::identity::ed25519::{Keypair, PublicKey};
+use libp2p_core::identity::{Keypair, PublicKey};
 use log::debug;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::time::Duration;
+use derivative::Derivative;
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
 
 /// A `KBucketsTable` represents a Kademlia routing table.
-#[derive(Debug, Clone)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone)]
 pub struct KBucketsTable<TKey, TVal> {
+    #[derivative(Debug="ignore")]
     local_kp: Keypair,
     /// The key identifying the local peer that owns the routing table.
     local_key: TKey,
@@ -164,7 +166,7 @@ where
     /// The given `pending_timeout` specifies the duration after creation of
     /// a [`PendingEntry`] after which it becomes eligible for insertion into
     /// a full bucket, replacing the least-recently (dis)connected node.
-    pub fn new(local_kp: ed25519::Keypair, local_key: TKey, pending_timeout: Duration) -> Self {
+    pub fn new(local_kp: Keypair, local_key: TKey, pending_timeout: Duration) -> Self {
         KBucketsTable {
             local_kp,
             local_key,
@@ -566,7 +568,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::identity;
     use libp2p_core::PeerId;
     use quickcheck::*;
     use rand::Rng;
@@ -576,8 +577,8 @@ mod tests {
 
     impl Arbitrary for TestTable {
         fn arbitrary<G: Gen>(g: &mut G) -> TestTable {
-            let keypair = ed25519::Keypair::generate();
-            let public_key = identity::PublicKey::Ed25519(keypair.public());
+            let keypair = Keypair::generate_ed25519();
+            let public_key = keypair.public();
             let local_key = Key::from(PeerId::from(public_key));
             let timeout = Duration::from_secs(g.gen_range(1, 360));
 
@@ -608,8 +609,8 @@ mod tests {
 
     #[test]
     fn buckets_are_non_overlapping_and_exhaustive() {
-        let keypair = ed25519::Keypair::generate();
-        let public_key = identity::PublicKey::Ed25519(keypair.public());
+        let keypair = Keypair::generate_ed25519();
+        let public_key = keypair.public();
         let local_key = Key::from(PeerId::from(public_key));
         let timeout = Duration::from_secs(0);
         let mut table = KBucketsTable::<KeyBytes, ()>::new(keypair, local_key.into(), timeout);
@@ -665,8 +666,8 @@ mod tests {
 
     #[test]
     fn entry_inserted() {
-        let keypair = ed25519::Keypair::generate();
-        let public_key = identity::PublicKey::Ed25519(keypair.public());
+        let keypair = Keypair::generate_ed25519();
+        let public_key = keypair.public();
         let local_key = Key::from(PeerId::from(public_key));
         let other_id = Key::from(PeerId::random());
         let other_weight = 0; // TODO: random weight
@@ -688,8 +689,8 @@ mod tests {
 
     #[test]
     fn entry_self() {
-        let keypair = ed25519::Keypair::generate();
-        let public_key = identity::PublicKey::Ed25519(keypair.public());
+        let keypair = Keypair::generate_ed25519();
+        let public_key = keypair.public();
         let local_key = Key::from(PeerId::from(public_key));
         let mut table =
             KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_secs(5));
@@ -701,8 +702,8 @@ mod tests {
 
     #[test]
     fn closest() {
-        let keypair = ed25519::Keypair::generate();
-        let public_key = identity::PublicKey::Ed25519(keypair.public());
+        let keypair = Keypair::generate_ed25519();
+        let public_key = keypair.public();
         let local_key = Key::from(PeerId::from(public_key));
         let mut table = KBucketsTable::<_, ()>::new(keypair, local_key, Duration::from_secs(5));
         let mut count = 0;
@@ -739,8 +740,8 @@ mod tests {
 
     #[test]
     fn applied_pending() {
-        let keypair = ed25519::Keypair::generate();
-        let public_key = identity::PublicKey::Ed25519(keypair.public());
+        let keypair = Keypair::generate_ed25519();
+        let public_key = keypair.public();
         let local_key = Key::from(PeerId::from(public_key));
         let mut table =
             KBucketsTable::<_, ()>::new(keypair, local_key.clone(), Duration::from_millis(1));
