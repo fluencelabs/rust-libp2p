@@ -40,7 +40,7 @@ use crate::query::{Query, QueryId, QueryPool, QueryConfig, QueryPoolState, Weigh
 use crate::record::{self, store::{self, RecordStore}, Record, ProviderRecord};
 use crate::contact::Contact;
 use fnv::{FnvHashMap, FnvHashSet};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId, multiaddr, identity::PublicKey};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, connection::ConnectionId, multiaddr, identity::PublicKey, identity::Keypair};
 use libp2p_swarm::{
     DialPeerCondition,
     NetworkBehaviour,
@@ -57,7 +57,6 @@ use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
 use std::vec;
 use wasm_timer::Instant;
-use libp2p_core::identity::{Keypair, PublicKey};
 use trust_graph::{Certificate};
 use derivative::Derivative;
 use crate::metrics::Metrics;
