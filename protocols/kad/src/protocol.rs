@@ -133,7 +133,7 @@ impl TryFrom<proto::message::Peer> for KadPeer {
         for cert in peer.certificates.into_iter() {
             let mut chain = Vec::with_capacity(cert.chain.len());
             for trust in cert.chain.into_iter() {
-                let issued_for = fluence_identity::PublicKey::decode(trust.issued_for)
+                let issued_for = fluence_identity::PublicKey::decode(&trust.issued_for)
                     .map_err(|e|
                         invalid_data(format!("invalid issued_for: {}", e).as_str())
                     )?;
