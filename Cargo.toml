@@ -97,7 +97,7 @@ libp2p-websocket = { version = "0.28.1", path = "transports/websocket", optional
 async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.8.1"
 tokio = { version = "1.0.1", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
-trust-graph = {git = "https://github.com/fluencelabs/trust-graph.git", branch = "publish", version = "0.2.7"}
+trust-graph = "0.2.7"
 
 [workspace]
 members = [
@@ -143,5 +143,6 @@ wasm-timer = { git = "https://github.com/fluencelabs/wasm-timer", branch = "satu
 [package.metadata.workspaces]
 independent = true
 
-[patch.'https://github.com/fluencelabs/rust-libp2p']
-libp2p-core = { package = "fluence-fork-libp2p-core", path = "core" }
+## uncomment this patch section if using git dependencies in trust graph
+# [patch.'https://github.com/fluencelabs/rust-libp2p']
+# libp2p-core = { package = "fluence-fork-libp2p-core", path = "core" }
