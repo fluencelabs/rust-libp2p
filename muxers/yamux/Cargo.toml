@@ -14,7 +14,7 @@ name = "libp2p_yamux"
 
 [dependencies]
 futures = "0.3.1"
-libp2p-core = { version = "0.27.1", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-core = { version = "0.27.2", path = "../../core", package = "fluence-fork-libp2p-core" }
 parking_lot = "0.11"
 thiserror = "1.0"
 yamux = "0.8.1"

@@ -15,7 +15,7 @@ name = "libp2p_wasm_ext"
 [dependencies]
 futures = "0.3.1"
 js-sys = "0.3.19"
-libp2p-core = { version = "0.27.1", path = "../../core", package = "fluence-fork-libp2p-core" }
+libp2p-core = { version = "0.27.2", path = "../../core", package = "fluence-fork-libp2p-core" }
 parity-send-wrapper = "0.1.0"
 wasm-bindgen = "0.2.42"
 wasm-bindgen-futures = "0.4.4"
