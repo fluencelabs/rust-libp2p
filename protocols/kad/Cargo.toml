@@ -33,7 +33,7 @@ void = "1.0"
 bs58 = "0.3.0"
 derivative = "2.0.2"
 
-trust-graph = {git = "https://github.com/fluencelabs/trust-graph.git", branch = "publish"}
+trust-graph = {git = "https://github.com/fluencelabs/trust-graph.git", branch = "publish", version = "0.2.7" }
 fluence-identity = {git = "https://github.com/fluencelabs/trust-graph.git", branch = "publish", package = "fluence-identity", version = "0.3.0"}
 prometheus = "0.9.0"
 
