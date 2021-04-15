@@ -88,10 +88,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         fn inject_event(&mut self, event: MdnsEvent) {
             if let MdnsEvent::Discovered(list) = event {
                 for (peer_id, multiaddr) in list {
-                    let key = match peer_id.as_public_key().expect("peer id must inline public key") {
-                        libp2p::identity::PublicKey::Ed25519(key) => key,
-                        _ => unreachable!("only ed25519 supported"),
-                    };
+                    let key = peer_id.as_public_key().expect("peer id must inline public key");
                     self.kademlia.add_address(&peer_id, multiaddr, key);
                 }
             }
@@ -155,10 +152,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = {
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(local_peer_id.clone());
-        let local_key = match local_key {
-            libp2p::identity::Keypair::Ed25519(kp) => kp,
-            _ => unreachable!("only ed25519 supported"),
-        };
         let trust = {
             let storage = InMemoryStorage::new_in_memory(vec![]);
             TrustGraph::new(storage)

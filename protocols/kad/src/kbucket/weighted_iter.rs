@@ -230,8 +230,8 @@ where
 mod tests {
     use std::time::Duration;
 
-    use libp2p_core::identity::ed25519;
-    use libp2p_core::{identity, PeerId};
+    use libp2p_core::PeerId;
+    use libp2p_core::identity::Keypair;
 
     use crate::kbucket::{Entry, InsertResult, Key};
 
@@ -250,8 +250,8 @@ mod tests {
             .try_init()
             .ok();
 
-        let keypair = ed25519::Keypair::generate();
-        let public_key = identity::PublicKey::Ed25519(keypair.public());
+        let keypair = Keypair::generate_ed25519();
+        let public_key = keypair.public();
         let local_key = Key::from(PeerId::from(public_key));
 
         let mut table =

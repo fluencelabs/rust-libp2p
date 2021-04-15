@@ -41,7 +41,7 @@ use unsigned_varint::codec;
 use wasm_timer::Instant;
 
 use derivative::Derivative;
-use libp2p_core::identity::ed25519::PublicKey;
+use libp2p_core::identity::PublicKey;
 use trust_graph::{Certificate, Trust};
 
 /// The protocol name used for negotiating with multistream-select.
@@ -123,7 +123,7 @@ impl TryFrom<proto::message::Peer> for KadPeer {
             .ok_or_else(|| invalid_data("unknown connection type"))?
             .into();
 
-        let public_key = PublicKey::decode(peer.public_key.as_slice())
+        let public_key = PublicKey::from_protobuf_encoding(peer.public_key.as_slice())
             .map_err(|e|
                 invalid_data(format!("invalid public key: {}", e).as_str())
             )?;
@@ -133,13 +133,13 @@ impl TryFrom<proto::message::Peer> for KadPeer {
         for cert in peer.certificates.into_iter() {
             let mut chain = Vec::with_capacity(cert.chain.len());
             for trust in cert.chain.into_iter() {
-                let issued_for = fluence_identity::PublicKey::from_bytes(trust.issued_for.as_slice())
+                let issued_for = fluence_identity::PublicKey::decode(&trust.issued_for)
                     .map_err(|e|
                         invalid_data(format!("invalid issued_for: {}", e).as_str())
                     )?;
                 let expires_at: Duration = Duration::from_secs(trust.expires_at_secs);
                 let issued_at: Duration = Duration::from_secs(trust.issued_at_secs);
-                let signature = fluence_identity::Signature::from_bytes(&trust.signature)
+                let signature = fluence_identity::Signature::decode(trust.signature)
                     .map_err(|e|
                         invalid_data(format!("invalid signature: {}", e).as_str())
                     )?;
@@ -166,9 +166,9 @@ impl Into<proto::message::Peer> for KadPeer {
             proto::Certificate {
                 chain: cert.chain.into_iter().map(|trust| {
                     proto::Trust {
-                        issued_for: trust.issued_for.to_bytes().to_vec(),
+                        issued_for: trust.issued_for.encode(),
                         expires_at_secs: trust.expires_at.as_secs(),
-                        signature: trust.signature.to_bytes().to_vec(),
+                        signature: trust.signature.encode(),
                         issued_at_secs: trust.issued_at.as_secs(),
                     }
                 }).collect(),
@@ -182,7 +182,7 @@ impl Into<proto::message::Peer> for KadPeer {
                 let ct: proto::message::ConnectionType = self.connection_ty.into();
                 ct as i32
             },
-            public_key: self.public_key.encode().to_vec(),
+            public_key: self.public_key.into_protobuf_encoding(),
             certificates
         }
     }
